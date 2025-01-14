@@ -10,31 +10,82 @@ stDRM.mode = 2; % Corresponds to Mode B
 stDRM.occupancy = 3;
 
 %% stOFDM Initialization
-% FFT length 
+% FFT length
 stOFDM.iNfft = get_drm_n_useful(stDRM.mode,stDRM.occupancy);
 % Guard Intervall Length
 stOFDM.iNg = get_drm_n_guard(stDRM.mode,stDRM.occupancy);
 % Complete Symbol length
 stOFDM.iNs = stOFDM.iNfft + stOFDM.iNg;
 
-%% Generate Frame Template
+%% Generate Frame
 % Number of Symbols per frame
 iNOfSymbols = get_drm_symbols_per_frame(stDRM.mode);
 
 % Initialize Frame Matrix
 Slk = get_drm_data_template_frame(stDRM.mode, stDRM.occupancy);
 
+% Load Image
+image = imread('image.png');
+
+image_size = size(image);
+
+viImage = image(:)';
+
+% Reconstruct the image from the vector
+% reconstructed_image = reshape(vector, size(image));
+
+% Concat Call Sign
+call_sign = uint8(double('DL0FHR'));
+viData = [call_sign, viImage];
+
+% mData = reshape( , 256);
+
+% viData -> n x 256
+%viData = reshape
+
+
 % Datamapping: M-QAM
-M = 4;
-viRand = randi([0 M-1],iNOfSymbols,stOFDM.iNfft);
-if M == 4
-    Dlk = qammod(viRand,M,'UnitAveragePower',true);
+M = 256;
+if M == 256               % image -> uint8 -> [0:255]
+    viDlk = qammod(viData,M,'UnitAveragePower',true);
 else
-    Dlk = qammod(viRand,M);
+    viDlk = qammod(viData,M);
 end
 
 % Set Data in Slk
-Slk(Slk == 1) = Dlk(Slk == 1);
+vSlk = reshape(Slk',1,[]); % concat rows one after another
+
+% Preallocate viDataPadded
+DataPerFrame = sum(vSlk);
+
+
+slkCtr = 1;
+dataCtr = 1;
+resultCtr = 1;
+viDataPadded = zeros(1, ceil( size(viDlk, 2) / DataPerFrame ));
+while dataCtr <= size(viDlk, 2)
+    if vSlk(slkCtr) == 1
+        viDataPadded(resultCtr) = viDlk(dataCtr);
+        dataCtr = dataCtr + 1;
+    else
+        % already zero
+    end
+    slkCtr = mod(slkCtr, 15*256) + 1; % 15*256 = len of Slk
+    resultCtr = resultCtr + 1;
+end
+
+nRows = ceil(size(viDataPadded, 2) / 256);
+nRowsPad = 15 - mod(nRows, 15);
+nRows = nRows + nRowsPad;
+
+zData = zeros(1, nRows * 256);
+zData(1:size(viDataPadded,2)) = viDataPadded;
+
+viDataPadded = reshape(zData, 256, [])';
+Dlk = viDataPadded;
+
+% Slk(Slk == 1) = Dlk(Slk == 1);
+Slk = Dlk;
 
 % Generate Pilots
 Plk = get_drm_pilot_frame(stDRM.mode,stDRM.occupancy);
@@ -75,7 +126,7 @@ switch iSwitchChannel
         iSampleShift = 0;
         vfcTransmitSignal = circshift(vfcTransmitSignal,[iSampleShift 0]);
 
-        
+
         % Frequency- and Phase-Offset
         vfcPhaser = exp(j*stChannel.fOmegaOffset*[0:length(vfcTransmitSignal)-1]+j*stChannel.fPhaseOffset);
         vfcPhaser = vfcPhaser(:);
@@ -127,7 +178,7 @@ mX(4,:) = circshift(vfcReceiveSignal,[112 0])';
 [~, iModeEst] = max(abs(mX*vfcReceiveSignal));
 iOcc = 3;
 % Determine OFDM Parameters for estimated Robustnes Mode
-% FFT length 
+% FFT length
 iNfft = get_drm_n_useful(iModeEst,3); % Occupancy fixed at 3
 % Guard Intervall Length
 iNg = get_drm_n_guard(iModeEst,3);% Occupancy fixed at 3
@@ -285,9 +336,9 @@ kmax = get_drm_kmax(iModeEst,iOcc)+dc;
 kInterpolate = kmin:kmax;
 
 for l=1:size(Plk,1)
-    
+
     cInterpolater = 'Wiener';
-    
+
     switch cInterpolater
         case 'Spline'
             % Channel Estimation -- symbol by symbol
@@ -295,12 +346,12 @@ for l=1:size(Plk,1)
             Hk = Rlk(l,kIndex)./Plk(l,kIndex);
             Hint = zeros(1,stOFDM.iNfft);
             Hint(kInterpolate) = interp1(kIndex,Hk,kInterpolate);
-            
+
             % Equalization -- symbol by symbol
             Rlk(l,kInterpolate) = Rlk(l,kInterpolate)./Hint(kInterpolate);
-            
+
         case 'Wiener'
-            
+
             % Korrelations Matrix R
             kIndex = find(Plk(l,:) ~= 0);
             mIndex = [];
@@ -313,23 +364,23 @@ for l=1:size(Plk,1)
             SNR = 50;
             N = 10^(-SNR/10);
             R = R_+eye(size(R_,1))*N;
-            
+
             Hint = zeros(1,stOFDM.iNfft);
             Hk = Rlk(l,kIndex)./Plk(l,kIndex);
             Hk = Hk(:);
             for k = kInterpolate
-                
+
                 % Observation Vector b
                 vIndex = kIndex - k;
                 b = sinc(vIndex*Omega_g);
                 b = b(:);
-                
+
                 % Wiener Filter g
                 g = inv(R)*b;
-                
+
                 % Apply Wiener Filter
                 Hint(k) = g.' * Hk;
-                
+
             end
 
 
@@ -344,11 +395,11 @@ for l=1:size(Plk,1)
 
             % Eqialization
             Rlk(l,kInterpolate) = Rlk(l,kInterpolate)./Hint(kInterpolate);
-            
+
     end
     Hint(kInterpolate) = Hint(kInterpolate).*hamming(1,length(kInterpolate));
     h_est = ifft( fftshift(Hint));
-    
+
 end
 
 
@@ -395,7 +446,7 @@ if SwitchDemoSync
     xlabel('Subchannel k')
     ylabel('Symbol l')
     title('Phase Difference')
-    
+
     fpilot_position = get_drm_fpilot_position(stDRM.mode)+get_drm_dc_position(stDRM.mode,stDRM.occupancy);
     dc_position = get_drm_dc_position(stDRM.mode,stDRM.occupancy);
     subplot(3,2,2)
@@ -404,16 +455,16 @@ if SwitchDemoSync
     ylabel('Phase Difference in rad')
     title(['1st fPilot / Subchannel:  ' num2str(fpilot_position(1)-dc_position)])
     grid
-    
-    
+
+
     subplot(3,2,4)
     plot(0:iNOfSymbols-1,mfcPhase(:,fpilot_position(2)))
     xlabel('Symbol l')
     ylabel('Phase Difference in rad')
     title(['2nd fPilot / Subchannel:  ' num2str(fpilot_position(2)-dc_position)])
     grid
-    
-    
+
+
     subplot(3,2,6)
     plot(0:iNOfSymbols-1,mfcPhase(:,fpilot_position(3)))
     xlabel('Symbol l')
