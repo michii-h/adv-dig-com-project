@@ -90,6 +90,7 @@ Slk = Dlk;
 % Generate Pilots
 Plk = get_drm_pilot_frame(stDRM.mode,stDRM.occupancy);
 
+% TODO:
 % Set Pilots in Slk
 Slk(Plk ~= 0) = Plk(Plk ~= 0);
 
