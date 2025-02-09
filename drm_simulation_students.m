@@ -90,7 +90,10 @@ Slk = Dlk;
 % Generate Pilots
 Plk = get_drm_pilot_frame(stDRM.mode,stDRM.occupancy);
 
-% TODO:
+% Duplicate Pilots to length of Slk
+iNOfFrames = nRows / iNOfSymbols;
+Plk = repmat(Plk,[iNOfFrames 1]);
+
 % Set Pilots in Slk
 Slk(Plk ~= 0) = Plk(Plk ~= 0);
 
