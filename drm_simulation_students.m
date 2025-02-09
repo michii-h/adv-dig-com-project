@@ -43,14 +43,13 @@ viData = [call_sign, viImage];
 % viData -> n x 256
 %viData = reshape
 
+binaryData = de2bi(viData, 8, 'left-msb'); % convert to binary (8 bits per integer)
+binaryData = reshape(binaryData.', [], 4); % reshape to 4 bits per row
 
 % Datamapping: M-QAM
-M = 256;
-if M == 256               % image -> uint8 -> [0:255]
-    viDlk = qammod(viData,M,'UnitAveragePower',true);
-else
-    viDlk = qammod(viData,M);
-end
+M = 16;     % 4 bits per row -> 16 possible values
+viDlk = qammod(binaryData,M,UnitAveragePower=true, InputType='bit');
+viDlk = reshape(viDlk.',1,[]); % concat rows one after another
 
 % Set Data in Slk
 vSlk = reshape(Slk',1,[]); % concat rows one after another
