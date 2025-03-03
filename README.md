@@ -1,7 +1,7 @@
 # Advanced Digital Communication Project (PStA)
 
 The goal of the project is the implemetation of a _Software Defined Radio_ (SDR) based on the DRM standard, which works via a satellite communication link.
-The SDR to be used is the ADLAM PLUTO (programed with MATLAB ) and the satellite to be used is the _Qatar-OSCAR 100_ (QO-100) (see: [amsat/qatar-oscar-100-qo-100](amsat/qatar-oscar-100-qo-100)).
+The SDR to be used is the ADLAM PLUTO (programed with MATLAB ) and the satellite to be used is the _Qatar-OSCAR 100_ (QO-100) (see: [amsat/qatar-oscar-100-qo-100](https://amsat-dl.org/eshail-2-amsat-phase-4-a-qatar-oscar-100/)).
 
 The SDR has to fullfill the following **requirements**
 
