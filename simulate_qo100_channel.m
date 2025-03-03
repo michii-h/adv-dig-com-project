@@ -1,125 +1,148 @@
 function [vfcReceiveSignal] = simulate_qo100_channel(vfcTransmitSignal, stSat, stOFDM)
-% SIMULATE_QO100_CHANNEL Simulates the channel effects of the QO-100 satellite
-%   This function simulates the effects of the QO-100 satellite channel on the
-%   transmitted signal using the Satellite Communications Toolbox
-%
-%   Parameters:
-%   vfcTransmitSignal - Complex baseband transmitted signal
-%   stSat - Structure with satellite parameters including:
-%       .orbit_altitude - Satellite altitude in meters (35786000 for GEO)
-%       .orbit_inclination - Inclination in degrees (typically ~0 for GEO)
-%       .frequency - Carrier frequency in Hz
-%       .gs_latitude - Ground station latitude in degrees
-%       .gs_longitude - Ground station longitude in degrees
-%       .gs_altitude - Ground station altitude in meters
-%       .sat_longitude - Satellite longitude in degrees
-%       .phase_noise - Phase noise standard deviation
-%       .rain_rate - Ground station rain rate in mm/h
-%       .multipath - Boolean flag for multipath simulation
-%       .tx_power_dBW - Transmit power in dBW
-%       .tx_gain_dB - Transmit antenna gain in dB
-%       .rx_gain_dB - Receive antenna gain in dB
-%       .system_temp_K - System noise temperature in Kelvin
-%   stOFDM - Structure with OFDM parameters
-%
-%   Returns:
-%   vfcReceiveSignal - Complex baseband received signal after channel
+    % SIMULATE_QO100_CHANNEL Simulates the QO-100 satellite channel
+    %   This function applies realistic satellite channel effects to a transmitted signal
+    %   using p681LMSChannel model from the Satellite Communications Toolbox
+    %
+    %   Parameters:
+    %   vfcTransmitSignal - Complex baseband signal to be transmitted
+    %   stSat - Structure with satellite parameters from init_qo100_params
+    %   stOFDM - Structure with OFDM parameters
+    %
+    %   Returns:
+    %   vfcReceiveSignal - Complex baseband signal after passing through channel
 
-% Calculate slant range to satellite
-slantRange = slantRangeCircularOrbit(stSat.orbit_altitude, ...
-                                    stSat.gs_latitude, ...
-                                    stSat.gs_longitude, ...
-                                    stSat.gs_altitude, ...
-                                    stSat.sat_longitude);
-
-% Calculate Doppler shift (minimal for GEO satellites)
-if isfield(stSat, 'orbit_inclination')
-    % Only calculate Doppler if satellite isn't perfectly geostationary
-    doppler = dopplerShiftCircularOrbit(stSat.orbit_altitude, ...
-                                       stSat.orbit_inclination, ...
-                                       stSat.frequency, ...
-                                       stSat.gs_latitude, ...
-                                       stSat.gs_longitude, ...
-                                       stSat.gs_altitude, ...
-                                       0); % Time = 0 for current position
-else
-    doppler = 0;
-end
-
-% Apply frequency scaling due to Doppler
-if doppler ~= 0
-    vfcPhaser = exp(1j * 2 * pi * doppler * [0:length(vfcTransmitSignal)-1]' / stOFDM.iNs);
-    vfcTransmitSignal = vfcTransmitSignal .* vfcPhaser;
-end
-
-% Calculate propagation losses using ITU-R P.618 model
-[totalLoss, ~, ~] = p618PropagationLosses(stSat.frequency, ...
-                                        stSat.gs_latitude, ...
-                                        stSat.rain_rate, ...
-                                        slantRange/1000, ... % Convert to km
-                                        stSat.gs_altitude/1000); % Convert to km
-
-% Apply path loss and phase rotation
-path_loss = db2mag(-totalLoss);
-vfcTransmitSignal = vfcTransmitSignal * path_loss;
-
-% Add transponder non-linearity (TWTA model)
-% QO-100 has a non-linear transponder that causes AM/AM and AM/PM distortion
-input_power = abs(vfcTransmitSignal).^2;
-norm_power = input_power / max(input_power);
-
-% AM/AM distortion (Saleh model)
-alpha_a = 2.1587;
-beta_a = 1.1517;
-am_am = alpha_a * norm_power ./ (1 + beta_a * norm_power);
-
-% AM/PM distortion
-alpha_p = 4.0033;
-beta_p = 9.1040;
-am_pm = alpha_p * norm_power ./ (1 + beta_p * norm_power);
-
-% Apply non-linear distortion
-distortion = am_am .* exp(1j * am_pm);
-distortion = distortion / max(abs(distortion)); % Normalize
-vfcTransmitSignal = vfcTransmitSignal .* distortion;
-
-% Add phase noise
-phase_noise = stSat.phase_noise * randn(size(vfcTransmitSignal));
-vfcTransmitSignal = vfcTransmitSignal .* exp(1j * phase_noise);
-
-% Calculate CNR using the satellite link budget model
-if isfield(stSat, 'tx_power_dBW') && isfield(stSat, 'tx_gain_dB') && ...
-   isfield(stSat, 'rx_gain_dB') && isfield(stSat, 'system_temp_K')
-
-    cnr = satelliteCNR('TransmitPower', stSat.tx_power_dBW, ...
-                      'TransmitterGain', stSat.tx_gain_dB, ...
-                      'ReceiverGain', stSat.rx_gain_dB, ...
-                      'FrequencyMHz', stSat.frequency/1e6, ...
-                      'SystemNoiseTemperature', stSat.system_temp_K, ...
-                      'PropagationLoss', totalLoss);
-    SNR = cnr;
-else
-    % Fallback to the provided SNR if parameters aren't available
-    SNR = stSat.SNR;
-end
-
-% Add AWGN based on calculated SNR
-vfcReceiveSignal = awgn(vfcTransmitSignal, SNR, 'measured');
-
-% Add multipath effects (if any)
-if isfield(stSat, 'multipath') && stSat.multipath
-    % QO-100 has minimal multipath, but we can model some reflections
-    reflections = [1 0.1 0.05];
-    delays = [0 5 10]; % in samples
-
-    % Create multipath channel
-    h_mp = zeros(1, max(delays) + 1);
-    for i = 1:length(reflections)
-        h_mp(delays(i) + 1) = reflections(i);
+    % Check if Satellite Communications Toolbox is available
+    if ~license('test', 'Satellite_Comm_Toolbox')
+        error('Satellite Communications Toolbox is required for this simulation');
     end
 
-    % Apply multipath
-    vfcReceiveSignal = conv(vfcReceiveSignal, h_mp, 'same');
+    % Get sampling rate from OFDM parameters or use default
+    if isfield(stOFDM, 'fs')
+        fs = stOFDM.fs;
+    else
+        fs = 8000; % Default sampling rate if not provided
+        warning('Sampling rate not provided in stOFDM structure. Using default: 8000 Hz');
+    end
+
+    % Create a p681LMSChannel object for the uplink (2.4 GHz)
+    uplink_channel = p681LMSChannel;
+    uplink_channel.SampleRate = fs;
+    uplink_channel.CarrierFrequency = stSat.uplink_freq;
+    uplink_channel.ElevationAngle = stSat.el;            % Elevation angle from ground station
+    uplink_channel.Environment = 'Suburban';         % Typical environment type
+    uplink_channel.ShadowingStSuburbanandardDeviation = 3.8;     % Typical value for suburban areas in dB
+
+    % Create a p681LMSChannel object for the downlink (10.5 GHz)
+    downlink_channel = p681LMSChannel;
+    downlink_channel.SampleRate = fs;
+    downlink_channel.CarrierFrequency = stSat.downlink_freq;
+    downlink_channel.ElevationAngle = stSat.el;          % Same elevation angle
+    downlink_channel.Environment = 'Suburban';       % Typical environment type
+    downlink_channel.ShadowingStandardDeviation = 4.5;   % Higher shadowing at higher frequencies
+
+    % 1. Apply uplink effects
+
+    % 1.1 Calculate and apply path loss for uplink
+    uplink_attenuation = 10^(-stSat.path_loss_up/20);    % Convert dB to linear
+    uplink_signal = vfcTransmitSignal * uplink_attenuation;
+
+    % 1.2 Apply the p681LMSChannel model for uplink
+    [uplink_channel_signal, uplink_path_gain] = uplink_channel(uplink_signal);
+
+    % 2. Apply satellite transponder effects
+
+    % 2.1 Apply nonlinear satellite transponder model
+    transponder_signal = applyTransponderNonlinearity(uplink_channel_signal, stSat);
+
+    % 2.2 Apply transponder gain
+    transponder_gain = 10^(stSat.sat_transponder_gain/20);  % Convert dB to linear
+    transponder_signal = transponder_signal * transponder_gain;
+
+    % 3. Apply downlink effects
+
+    % 3.1 Calculate and apply path loss for downlink
+    downlink_attenuation = 10^(-stSat.path_loss_down/20);  % Convert dB to linear
+    downlink_signal = transponder_signal * downlink_attenuation;
+
+    % 3.2 Apply the p681LMSChannel model for downlink
+    [downlink_channel_signal, downlink_path_gain] = downlink_channel(downlink_signal);
+
+    % 4. Add thermal noise based on CNR
+    signal_power = mean(abs(downlink_channel_signal).^2);
+    CNR_linear = 10^(stSat.CNR/10);
+    noise_power = signal_power / CNR_linear;
+
+    % Generate complex Gaussian noise
+    signal_length = length(downlink_channel_signal);
+    noise = sqrt(noise_power/2) * (randn(signal_length, 1) + 1j*randn(signal_length, 1));
+
+    % 5. Apply frequency offset due to oscillator drift
+    % (Doppler effects are already included in the p681LMSChannel model)
+    freq_offset_Hz = calculateOscillatorOffset(stSat);
+    t = (0:signal_length-1)' / fs;
+    freq_offset_factor = exp(1j * 2 * pi * freq_offset_Hz * t);
+
+    % Apply frequency offset and add noise
+    vfcReceiveSignal = downlink_channel_signal .* freq_offset_factor + noise;
+
+    % Print channel information for debugging
+    fprintf('QO-100 Channel Simulation:\n');
+    fprintf('  Uplink Path Gain: %.2f dB\n', 20*log10(mean(abs(uplink_path_gain))));
+    fprintf('  Downlink Path Gain: %.2f dB\n', 20*log10(mean(abs(downlink_path_gain))));
+    fprintf('  Added Frequency Offset: %.2f Hz\n', freq_offset_Hz);
+    fprintf('  Final CNR: %.2f dB\n', 10*log10(signal_power/noise_power));
 end
 
+function output_signal = applyTransponderNonlinearity(input_signal, stSat)
+    % Apply nonlinear transponder characteristics (AM/AM and AM/PM conversion)
+
+    % Get input signal envelope
+    input_envelope = abs(input_signal);
+    input_phase = angle(input_signal);
+
+    % Normalize input power to transponder specs
+    norm_factor = sqrt(mean(input_envelope.^2));
+    norm_envelope = input_envelope / norm_factor;
+
+    % Apply Saleh model for AM/AM conversion
+    % Parameters can be adjusted based on actual transponder characteristics
+    alpha_a = 2.1587; % AM/AM parameter
+    beta_a = 1.1517;  % AM/AM parameter
+
+    % AM/AM conversion
+    output_magnitude = (alpha_a * norm_envelope) ./ (1 + beta_a * norm_envelope.^2);
+
+    % Apply Saleh model for AM/PM conversion
+    % Parameters can be adjusted based on actual transponder characteristics
+    alpha_p = 4.0033; % AM/PM parameter
+    beta_p = 9.1040;  % AM/PM parameter
+
+    % AM/PM conversion (phase distortion based on input amplitude)
+    phase_distortion = (alpha_p * norm_envelope.^2) ./ (1 + beta_p * norm_envelope.^2);
+    output_phase = input_phase + phase_distortion;
+
+    % Recombine magnitude and phase
+    output_signal = output_magnitude .* exp(1j * output_phase);
+
+    % Scale back to original power level
+    output_signal = output_signal * norm_factor;
+end
+
+function freq_offset = calculateOscillatorOffset(stSat)
+    % Calculate frequency offset due to oscillator instability
+    % (Doppler is handled by the p681LMSChannel model)
+
+    % Typical frequency stability values for oscillators
+    uplink_oscillator_stability = 1e-6;  % 1 ppm
+    downlink_oscillator_stability = 1e-6; % 1 ppm
+
+    % Oscillator frequency errors
+    uplink_osc_error = uplink_oscillator_stability * stSat.uplink_freq;
+    downlink_osc_error = downlink_oscillator_stability * stSat.downlink_freq;
+
+    % Total frequency offset from oscillator instabilities
+    freq_offset = uplink_osc_error + downlink_osc_error;
+
+    % Add some randomness to model variations
+    freq_offset = freq_offset * (1 + 0.1*ranSat.up * randn);
 end

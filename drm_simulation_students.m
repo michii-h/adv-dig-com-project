@@ -17,7 +17,7 @@ stOFDM.iNg = get_drm_n_guard(stDRM.mode,stDRM.occupancy);
 % Complete Symbol length
 stOFDM.iNs = stOFDM.iNfft + stOFDM.iNg;
 
-%% Generate Frame
+%% Generate DRM Frame
 % Number of Symbols per frame
 iNOfSymbols = get_drm_symbols_per_frame(stDRM.mode);
 
@@ -42,7 +42,6 @@ viData = [call_sign, viImage];
 
 % viData -> n x 256
 %viData = reshape
-
 binaryData = de2bi(viData, 8, 'left-msb'); % convert to binary (8 bits per integer)
 binaryData = reshape(binaryData.', [], 4); % reshape to 4 bits per row
 
@@ -57,7 +56,7 @@ vSlk = reshape(Slk',1,[]); % concat rows one after another
 % Preallocate viDataPadded
 DataPerFrame = sum(vSlk);
 
-
+% Pad Data with Zeros at Pilot Positions
 slkCtr = 1;
 dataCtr = 1;
 resultCtr = 1;
@@ -73,6 +72,7 @@ while dataCtr <= size(viDlk, 2)
     resultCtr = resultCtr + 1;
 end
 
+% Padding at end for full DRM frames
 nRows = ceil(size(viDataPadded, 2) / 256);
 nRowsPad = 15 - mod(nRows, 15);
 nRows = nRows + nRowsPad;
@@ -108,12 +108,16 @@ SlkTemp = SlkTemp.';
 vfcTransmitSignal = SlkTemp(:);
 
 % Repeat iG=4 Frames
-iG = 4;
-vfcTransmitSignal = repmat(vfcTransmitSignal,iG,1);
+% iG = 4;
+% vfcTransmitSignal = repmat(vfcTransmitSignal,iG,1);
+
+
+%% Initialize QO-100 parameters with a 90cm dish and 5W transmit power
+stSat = init_qo100_params(0.9, 5);
 
 %% Channel
 % Switch Channels
-iSwitchChannel = 1;
+iSwitchChannel = 5; % Set to 5 for QO-100 satellite simulation
 
 switch iSwitchChannel
 
@@ -158,24 +162,44 @@ switch iSwitchChannel
        vfcReceiveSignal = LoopbackZedBoard(vfcTransmitSignal,stZedboard);
        vfcReceiveSignal =vfcReceiveSignal(:,1);
 
-    case 5 % Use Sattelite Communication Toolsbox for Channel Simulation
+    case 5 % Use Satellite Communication Toolbox for QO-100 Channel Simulation
+       fprintf('Using QO-100 satellite channel simulation...\n');
+       vfcReceiveSignal = simulate_qo100_channel(vfcTransmitSignal, stSat, stOFDM);
 
 end
+
 %% Detect Robustness Mode
 % force vfcReceiveSignal to be a column vector
 vfcReceiveSignal = vfcReceiveSignal(:);
 
-figure(100)
-plot(-length(vfcReceiveSignal)+1:length(vfcReceiveSignal)-1,abs(xcorr((vfcReceiveSignal))))
-xlabel('\Delta k')
-ylabel('r_{xx}(\Delta k)')
+% figure(100)
+% plot(-length(vfcReceiveSignal)+1:length(vfcReceiveSignal)-1,abs(xcorr((vfcReceiveSignal))))
+% xlabel('\Delta k')
+% ylabel('r_{xx}(\Delta k)')
 
-% Detect Robustness by autocorrelation at dk = [288 256 176 112]
-% Autocorrelation matrix at dk corresponding to FFT lengths
-mX(1,:) = circshift(vfcReceiveSignal,[288 0])';
-mX(2,:) = circshift(vfcReceiveSignal,[256 0])';
-mX(3,:) = circshift(vfcReceiveSignal,[176 0])';
-mX(4,:) = circshift(vfcReceiveSignal,[112 0])';
+% Detect Robustness Mode by autocorrelation at FFT lengths of different modes
+% Define FFT lengths for DRM modes A, B, C, D (112, 256, 176, 288)
+mode_fft_lengths = [288, 256, 176, 112]; % Corresponding to modes A, B, C, D
+
+% Pre-allocate correlation matrix
+mX = zeros(length(mode_fft_lengths), length(vfcReceiveSignal));
+
+% Calculate autocorrelation for each mode
+for i = 1:length(mode_fft_lengths)
+    shifted_signal = circshift(vfcReceiveSignal, [mode_fft_lengths(i), 0]);
+    mX(i,:) = conj(shifted_signal)' .* vfcReceiveSignal';
+end
+
+% Display correlation peaks for each mode
+% figure(100);
+% subplot(2,1,2);
+% plot(abs(sum(mX,2)), 'o-');
+% xlabel('Mode Index');
+% ylabel('Correlation Strength');
+% title('Robustness Mode Detection');
+% grid on;
+% xticks(1:4);
+% xticklabels({'A', 'B', 'C', 'D'});
 
 % Calculate Robustnes Mode
 [~, iModeEst] = max(abs(mX*vfcReceiveSignal));
@@ -189,6 +213,9 @@ iNg = get_drm_n_guard(iModeEst,3);% Occupancy fixed at 3
 iNs = iNfft + iNg;
 % Number of Symols per DRM Frame
 iNOfSymbolsPerFrame = get_drm_symbols_per_frame(iModeEst);
+
+fprintf('Robustness Mode: %d\n', iModeEst);
+
 %% Synchronization
 % Number of Symbols in CaptureBuffer
 iNOfSymbols = floor(length(vfcReceiveSignal)/iNs);
@@ -199,12 +226,8 @@ R = zeros(1,iNs);
 
 for l = 0:iNOfSymbols-2
 for k = 1:iNs
-
-    R(k) = R(k) + ...
-                        sum(conj(vfcReceiveSignal(k+vIndexGI+l*iNs)).*vfcReceiveSignal(k+vIndexGI+iNfft+l*iNs));
-
-    % R(k) = R(k) + ...
-    %                     vfcReceiveSignal(k+vIndexGI+l*iNs)'*vfcReceiveSignal(k+vIndexGI+iNfft+l*iNs);
+    % Calculate Correlation
+    R(k) = R(k) + vfcReceiveSignal(k+vIndexGI+l*iNs)'*vfcReceiveSignal(k+vIndexGI+iNfft+l*iNs);
 end
 end
 
@@ -221,15 +244,13 @@ vfcReceiveSignal = vfcReceiveSignal(iStartSample:end);
 iNOfSymbols = floor(length(vfcReceiveSignal)/iNs);
 vfcReceiveSignal = vfcReceiveSignal(1:iNOfSymbols*iNs);
 
-
-
-figure(101)
-plot([0:iNs-1],abs(R))
-xlabel('k')
-ylabel('R_{xy}(k)')
-hold on
-plot(iStartSample, abs(R(iStartSample)),'ro')
-hold off
+% figure(101)
+% plot([0:iNs-1],abs(R))
+% xlabel('k')
+% ylabel('R_{xy}(k)')
+% hold on
+% plot(iStartSample, abs(R(iStartSample)),'ro')
+% hold off
 
 %figure;plot(abs(sum(reshape(filter(ones(1,iNg),1,vfcReceiveSignal.*conj(circshift(vfcReceiveSignal,[iNfft 0]))),iNs,iNOfSymbols),2)))
 
@@ -280,58 +301,9 @@ end
 Rlk = stRlk{1};
 
 %% Fine Synchronization
+% Use optimized FFT-based fine synchronization
+[Rlk, freq_offset, phase_offset] = optimize_fine_sync(Rlk, Plk, stOFDM.iNfft);
 
-figure(301)
-mPhase = angle(conj(Rlk).*Plk);
-%mPhase = angle(conj(Rlk).*Slk);
-
-mesh([-iNfft/2:iNfft/2-1],[1:size(Plk,1)],unwrap(mPhase))
-ylabel('Symbol l')
-xlabel('Subchannel k')
-zlabel('Phase \Phi(l,k)')
-
-for l = 1:size(Plk,1)
-figure(302)
-stem([-iNfft/2:iNfft/2-1],unwrap(mPhase(l,:)))
-xlabel('Subchannel k')
-ylabel(['Phase \Phi(' num2str(l) ',k)'])
-
-
-% Linear Regression of Phases
-kPilots = [find(Plk(l,:) ~= 0)-iNfft/2-1].';
-V = [kPilots ones(size(kPilots))];
-vPhi = unwrap(mPhase(l,Plk(l,:) ~= 0)).';
-% tic;m = inv(V'*V)*V'*vPhi;toc
-% tic;m = pinv(V)*vPhi;toc
-m = V\vPhi;
-
-
-hold on
-kAxis = -iNfft/2:iNfft/2-1;
-plot(kAxis,m(1)*kAxis+m(2))
-hold off
-
-% Comensate Phase correction
-mPhaseEst = m(1)*kAxis+m(2);
-%Rlk(l,:) = Rlk(l,:) .* exp(-j*mPhaseEst);
-end
-
-% Alternative
-mPhase = conj(Rlk).*Plk;
-mPhase = mPhase(:,[16 48 64]+iNfft/2+1);
-
-figure(303)
-subplot(2,1,1)
-stem(1:15,angle(mPhase))
-xlabel('symbol l')
-ylabel(['Phase \Phi(l,k=[' num2str([16 48 64]) '])'])
-
-mPhaseFFT = fft(mPhase,1024,1);
-
-subplot(2,1,2)
-stem(abs(mPhaseFFT))
-xlabel('\mu')
-ylabel(['FFT\{\Phi(l,k=[' num2str([16 48 64]) '])\}'])
 %% Kanalschätzung und Entzerrung
 dc = get_drm_dc_position(iModeEst,iOcc);
 kmin = get_drm_kmin(iModeEst,iOcc)+dc;
