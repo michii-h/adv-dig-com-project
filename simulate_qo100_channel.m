@@ -20,22 +20,22 @@ function [vfcReceiveSignal] = simulate_qo100_channel(vfcTransmitSignal, stSat, s
     if isfield(stOFDM, 'fs')
         fs = stOFDM.fs;
     else
-        fs = 8000; % Default sampling rate if not provided
-        warning('Sampling rate not provided in stOFDM structure. Using default: 8000 Hz');
+        fs = 12e3; % stAdalmPluto.fs = 12e3
+        warning('Sampling rate not provided in stOFDM structure. Using default: 12 kHz');
     end
 
     % Create a p681LMSChannel object for the uplink (2.4 GHz)
     uplink_channel = p681LMSChannel;
     uplink_channel.SampleRate = fs;
     uplink_channel.CarrierFrequency = stSat.uplink_freq;
-    uplink_channel.ElevationAngle = stSat.el;            % Elevation angle from ground station
+    uplink_channel.ElevationAngle = stSat.el;        % Elevation angle from ground station
     uplink_channel.Environment = 'Suburban';         % Typical environment type
 
     % Create a p681LMSChannel object for the downlink (10.5 GHz)
     downlink_channel = p681LMSChannel;
     downlink_channel.SampleRate = fs;
     downlink_channel.CarrierFrequency = stSat.downlink_freq;
-    downlink_channel.ElevationAngle = stSat.el;          % Same elevation angle
+    downlink_channel.ElevationAngle = stSat.el;      % Same elevation angle
     downlink_channel.Environment = 'Suburban';       % Typical environment type
 
     % 1. Apply uplink effects

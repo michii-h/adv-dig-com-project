@@ -76,7 +76,7 @@ function stSat = initBasicParams(antenna_diameter, tx_power_W)
     stSat.gs_latitude = 47.86603555991787;   % latitude in degrees
     stSat.gs_longitude = 12.108404806448695; % longitude in degrees
     stSat.gs_altitude = 447;                 % altitude in meters
-    stSat.rain_rate = 25;                    % Average rain rate in mm/h (typical for Bavaria)
+    stSat.rain_rate = 5;                     % Average rain rate in mm/h
 
     % Antenna parameters
     stSat.antenna_diameter = antenna_diameter;
