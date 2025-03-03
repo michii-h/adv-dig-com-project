@@ -30,7 +30,6 @@ function [vfcReceiveSignal] = simulate_qo100_channel(vfcTransmitSignal, stSat, s
     uplink_channel.CarrierFrequency = stSat.uplink_freq;
     uplink_channel.ElevationAngle = stSat.el;            % Elevation angle from ground station
     uplink_channel.Environment = 'Suburban';         % Typical environment type
-    uplink_channel.ShadowingStSuburbanandardDeviation = 3.8;     % Typical value for suburban areas in dB
 
     % Create a p681LMSChannel object for the downlink (10.5 GHz)
     downlink_channel = p681LMSChannel;
@@ -38,7 +37,6 @@ function [vfcReceiveSignal] = simulate_qo100_channel(vfcTransmitSignal, stSat, s
     downlink_channel.CarrierFrequency = stSat.downlink_freq;
     downlink_channel.ElevationAngle = stSat.el;          % Same elevation angle
     downlink_channel.Environment = 'Suburban';       % Typical environment type
-    downlink_channel.ShadowingStandardDeviation = 4.5;   % Higher shadowing at higher frequencies
 
     % 1. Apply uplink effects
 
@@ -144,5 +142,5 @@ function freq_offset = calculateOscillatorOffset(stSat)
     freq_offset = uplink_osc_error + downlink_osc_error;
 
     % Add some randomness to model variations
-    freq_offset = freq_offset * (1 + 0.1*ranSat.up * randn);
+    freq_offset = freq_offset * (1 + 0.1 * (rand-0.5));
 end

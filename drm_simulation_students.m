@@ -177,29 +177,12 @@ vfcReceiveSignal = vfcReceiveSignal(:);
 % xlabel('\Delta k')
 % ylabel('r_{xx}(\Delta k)')
 
-% Detect Robustness Mode by autocorrelation at FFT lengths of different modes
-% Define FFT lengths for DRM modes A, B, C, D (112, 256, 176, 288)
-mode_fft_lengths = [288, 256, 176, 112]; % Corresponding to modes A, B, C, D
-
-% Pre-allocate correlation matrix
-mX = zeros(length(mode_fft_lengths), length(vfcReceiveSignal));
-
-% Calculate autocorrelation for each mode
-for i = 1:length(mode_fft_lengths)
-    shifted_signal = circshift(vfcReceiveSignal, [mode_fft_lengths(i), 0]);
-    mX(i,:) = conj(shifted_signal)' .* vfcReceiveSignal';
-end
-
-% Display correlation peaks for each mode
-% figure(100);
-% subplot(2,1,2);
-% plot(abs(sum(mX,2)), 'o-');
-% xlabel('Mode Index');
-% ylabel('Correlation Strength');
-% title('Robustness Mode Detection');
-% grid on;
-% xticks(1:4);
-% xticklabels({'A', 'B', 'C', 'D'});
+% Detect Robustness by autocorrelation at dk = [288 256 176 112]
+% Autocorrelation matrix at dk corresponding to FFT lengths
+mX(1,:) = circshift(vfcReceiveSignal,[288 0])';
+mX(2,:) = circshift(vfcReceiveSignal,[256 0])';
+mX(3,:) = circshift(vfcReceiveSignal,[176 0])';
+mX(4,:) = circshift(vfcReceiveSignal,[112 0])';
 
 % Calculate Robustnes Mode
 [~, iModeEst] = max(abs(mX*vfcReceiveSignal));
@@ -214,7 +197,8 @@ iNs = iNfft + iNg;
 % Number of Symols per DRM Frame
 iNOfSymbolsPerFrame = get_drm_symbols_per_frame(iModeEst);
 
-fprintf('Robustness Mode: %d\n', iModeEst);
+strModes = ['A','B','C','D'];
+fprintf('Robustness Mode: %s\n', strModes(iModeEst));
 
 %% Synchronization
 % Number of Symbols in CaptureBuffer
@@ -256,7 +240,7 @@ vfcReceiveSignal = vfcReceiveSignal(1:iNOfSymbols*iNs);
 
 %% OFDM Demodulator
 % Serial to Parallel Conversion
-RlkTemp = reshape(vfcReceiveSignal,stOFDM.iNs,iNOfSymbols).';
+RlkTemp = reshape(vfcReceiveSignal,stOFDM.iNs,[]).';
 
 % Remove Cyclic Prefix
 RlkTemp = RlkTemp(:,stOFDM.iNg+1:end);
