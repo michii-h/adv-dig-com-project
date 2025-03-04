@@ -61,7 +61,8 @@ DataPerFrame = sum(vSlk);
 slkCtr = 1;
 dataCtr = 1;
 resultCtr = 1;
-viDataPadded = zeros(1, ceil( size(viDlk, 2) / DataPerFrame ));
+iNofFramesNeeded = ceil( size(viDlk, 2) / DataPerFrame );
+viDataPadded = zeros(1, iNofFramesNeeded);
 while dataCtr <= size(viDlk, 2)
     if vSlk(slkCtr) == 1
         viDataPadded(resultCtr) = viDlk(dataCtr);
@@ -107,13 +108,13 @@ SlkTemp = [SlkTemp(:,end-stOFDM.iNg+1:end) SlkTemp];
 SlkTemp = SlkTemp.';
 vfcTransmitSignal = SlkTemp(:);
 
-% Repeat iG=4 Frames
-iG = 4;
+% Repeat iG=1 Frames
+iG = 2;
 vfcTransmitSignal = repmat(vfcTransmitSignal,iG,1);
 
 %% Channel
 % Switch Channels
-iSwitchChannel = 1;
+iSwitchChannel = 0;
 
 switch iSwitchChannel
 
@@ -165,10 +166,12 @@ end
 % force vfcReceiveSignal to be a column vector
 vfcReceiveSignal = vfcReceiveSignal(:);
 
-figure(100)
-plot(-length(vfcReceiveSignal)+1:length(vfcReceiveSignal)-1,abs(xcorr((vfcReceiveSignal))))
-xlabel('\Delta k')
-ylabel('r_{xx}(\Delta k)')
+if SwitchDemoSync
+    figure(100)
+    plot(-length(vfcReceiveSignal)+1:length(vfcReceiveSignal)-1,abs(xcorr((vfcReceiveSignal))))
+    xlabel('\Delta k')
+    ylabel('r_{xx}(\Delta k)')
+end
 
 % Detect Robustness by autocorrelation at dk = [288 256 176 112]
 % Autocorrelation matrix at dk corresponding to FFT lengths
@@ -222,17 +225,18 @@ iNOfSymbols = floor(length(vfcReceiveSignal)/iNs);
 vfcReceiveSignal = vfcReceiveSignal(1:iNOfSymbols*iNs);
 
 
+if SwitchDemoSync
+    figure(101)
+    plot([0:iNs-1],abs(R))
+    xlabel('k')
+    ylabel('R_{xy}(k)')
+    hold on
+    plot(iStartSample, abs(R(iStartSample)),'ro')
+    hold off
 
-figure(101)
-plot([0:iNs-1],abs(R))
-xlabel('k')
-ylabel('R_{xy}(k)')
-hold on
-plot(iStartSample, abs(R(iStartSample)),'ro')
-hold off
-
-%figure;plot(abs(sum(reshape(filter(ones(1,iNg),1,vfcReceiveSignal.*conj(circshift(vfcReceiveSignal,[iNfft 0]))),iNs,iNOfSymbols),2)))
-
+    figure;
+    plot(abs(sum(reshape(filter(ones(1,iNg),1,vfcReceiveSignal.*conj(circshift(vfcReceiveSignal,[iNfft 0]))),iNs,iNOfSymbols),2)))
+end
 %% OFDM Demodulator
 % Serial to Parallel Conversion
 RlkTemp = reshape(vfcReceiveSignal,stOFDM.iNs,iNOfSymbols).';
@@ -249,18 +253,21 @@ Plk = get_drm_pilot_frame(iModeEst,3);
 % Calczlate Correlation Metrik
 Mlk = xcorr2(Rlk,Plk);
 Mlk(1:iNOfSymbolsPerFrame-1,:) = [];
-figure(201);
-subplot(2,1,1)
-mesh([0:2*iNfft-2]-iNfft,0:size(Mlk,1)-1,abs(Mlk))
 
-xlabel('k Subchannel')
-ylabel('l Symbols')
-zlabel('|M(l,k)|')
-
-subplot(2,1,2)
-plot(0:size(Mlk,1)-1,abs(Mlk(:,iNfft)))
-xlabel('l Symbols')
-ylabel('|M(l,0)|')
+if SwitchDemoSync
+    figure(201);
+    subplot(2,1,1)
+    mesh([0:2*iNfft-2]-iNfft,0:size(Mlk,1)-1,abs(Mlk))
+    
+    xlabel('k Subchannel')
+    ylabel('l Symbols')
+    zlabel('|M(l,k)|')
+    
+    subplot(2,1,2)
+    plot(0:size(Mlk,1)-1,abs(Mlk(:,iNfft)))
+    xlabel('l Symbols')
+    ylabel('|M(l,0)|')
+end
 
 iNOfFrames = floor(size(Mlk,1)/iNOfSymbolsPerFrame);
 
@@ -277,25 +284,33 @@ for iFrame = 1:length(viFrameStart)
 end
 
 % Run first Frame
-Rlk = stRlk{1};
+Rlk = vertcat(stRlk{1:iNofFramesNeeded});
+iNOfSymbols = iNofFramesNeeded * iNOfSymbolsPerFrame;
 
 %% Fine Synchronization
+mPhaseEst = zeros(iNOfFrames,iNfft);
+mPhaseFFT = zeros(1024*iNOfFrames,iNfft);
+for i = 1:iNofFramesNeeded-1
+iFrameStart = (i-1)*15+1;
+RlkTemp = Rlk(iFrameStart:iFrameStart+14,:);
+mPhase = angle(conj(RlkTemp).*Plk);
 
-figure(301)
-mPhase = angle(conj(Rlk).*Plk);
-%mPhase = angle(conj(Rlk).*Slk);
+if SwitchDemoSync
+    figure(301)
+    mesh([-iNfft/2:iNfft/2-1],[1:size(Plk,1)],unwrap(mPhase))
+    ylabel('Symbol l')
+    xlabel('Subchannel k')
+    zlabel('Phase \Phi(l,k)')
+end
 
-mesh([-iNfft/2:iNfft/2-1],[1:size(Plk,1)],unwrap(mPhase))
-ylabel('Symbol l')
-xlabel('Subchannel k')
-zlabel('Phase \Phi(l,k)')
 
 for l = 1:size(Plk,1)
-figure(302)
-stem([-iNfft/2:iNfft/2-1],unwrap(mPhase(l,:)))
-xlabel('Subchannel k')
-ylabel(['Phase \Phi(' num2str(l) ',k)'])
-
+if SwitchDemoSync
+    figure(302)
+    stem([-iNfft/2:iNfft/2-1],unwrap(mPhase(l,:)))
+    xlabel('Subchannel k')
+    ylabel(['Phase \Phi(' num2str(l) ',k)'])
+end
 
 % Linear Regression of Phases
 kPilots = [find(Plk(l,:) ~= 0)-iNfft/2-1].';
@@ -305,33 +320,41 @@ vPhi = unwrap(mPhase(l,Plk(l,:) ~= 0)).';
 % tic;m = pinv(V)*vPhi;toc
 m = V\vPhi;
 
-
-hold on
 kAxis = -iNfft/2:iNfft/2-1;
-plot(kAxis,m(1)*kAxis+m(2))
-hold off
 
-% Comensate Phase correction
-mPhaseEst = m(1)*kAxis+m(2);
-%Rlk(l,:) = Rlk(l,:) .* exp(-j*mPhaseEst);
+if SwitchDemoSync
+    hold on
+    plot(kAxis,m(1)*kAxis+m(2))
+    hold off
 end
 
+% Comensate Phase correction
+mPhaseEst(i,:) = m(1)*kAxis+m(2);
+Rlk(iFrameStart:iFrameStart+l-1,:) = Rlk(iFrameStart:iFrameStart+l-1,:) .* exp(-j*mPhaseEst(i,:));
+end
+
+
 % Alternative
-mPhase = conj(Rlk).*Plk;
-mPhase = mPhase(:,[16 48 64]+iNfft/2+1);
+% mPhase = conj(Rlk).*Plk;
+% mPhase = mPhase(:,[16 48 64]+iNfft/2+1);
 
-figure(303)
-subplot(2,1,1)
-stem(1:15,angle(mPhase))
-xlabel('symbol l')
-ylabel(['Phase \Phi(l,k=[' num2str([16 48 64]) '])'])
+if SwitchDemoSync
+    figure(303)
+    subplot(2,1,1)
+    stem(1:15,angle(mPhase))
+    xlabel('symbol l')
+    ylabel(['Phase \Phi(l,k=[' num2str([16 48 64]) '])'])
+end
 
-mPhaseFFT = fft(mPhase,1024,1);
+mPhaseFFT(i:i+1023,:) = fft(mPhase,1024,1);
+end
 
-subplot(2,1,2)
-stem(abs(mPhaseFFT))
-xlabel('\mu')
-ylabel(['FFT\{\Phi(l,k=[' num2str([16 48 64]) '])\}'])
+if SwitchDemoSync
+    subplot(2,1,2)
+    stem(abs(mPhaseFFT))
+    xlabel('\mu')
+    ylabel(['FFT\{\Phi(l,k=[' num2str([16 48 64]) '])\}'])
+end
 %% Kanalschätzung und Entzerrung
 dc = get_drm_dc_position(iModeEst,iOcc);
 kmin = get_drm_kmin(iModeEst,iOcc)+dc;
@@ -407,7 +430,7 @@ end
 
 
 %% Graphical Output
-SlkTemp = get_drm_data_template_frame(stDRM.mode, stDRM.occupancy);
+SlkTemp = repmat(get_drm_data_template_frame(stDRM.mode, stDRM.occupancy), iNofFramesNeeded, 1);
 figure(1)
 subplot(2,2,1)
 imagesc((1:stOFDM.iNfft)-get_drm_dc_position(stDRM.mode,stDRM.occupancy),0:size(Slk,1)-1,abs(Slk))
@@ -418,7 +441,7 @@ title('Transmit Frame |Slk|')
 subplot(2,2,2)
 plot(Slk(SlkTemp ==1),'r.')
 grid
-axis square
+%axis square
 xlabel('I')
 ylabel('Q')
 title('Transmit Constellation')
