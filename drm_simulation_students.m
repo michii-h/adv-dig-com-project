@@ -109,7 +109,7 @@ SlkTemp = SlkTemp.';
 vfcTransmitSignal = SlkTemp(:);
 
 % Repeat iG=1 Frames
-iG = 2;
+iG = 5;
 vfcTransmitSignal = repmat(vfcTransmitSignal,iG,1);
 
 %% Channel
@@ -284,7 +284,7 @@ for iFrame = 1:length(viFrameStart)
 end
 
 % Run first Frame
-Rlk = vertcat(stRlk{1:iNofFramesNeeded});
+Rlk = vertcat(stRlk{1:end});
 iNOfSymbols = iNofFramesNeeded * iNOfSymbolsPerFrame;
 
 %% Fine Synchronization
@@ -453,6 +453,8 @@ reconstructed_image = reshape(viImageReceived, image_size);
 % Anzeige des rekonstruierten Bildes
 figure(140)
 imshow(uint8(reconstructed_image));
+
+plot(xcorr(abs(viDataReceived),abs(viDlk))) %todo
 %% Graphical Output
 SlkTemp = repmat(get_drm_data_template_frame(stDRM.mode, stDRM.occupancy), iNofFramesNeeded, 1);
 figure(1)
