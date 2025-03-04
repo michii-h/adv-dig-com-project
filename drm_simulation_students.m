@@ -43,8 +43,8 @@ viData = [call_sign, viImage];
 % viData -> n x 256
 %viData = reshape
 
-binaryData = de2bi(viData, 8, 'left-msb'); % convert to binary (8 bits per integer)
-binaryData = reshape(binaryData.', [], 4); % reshape to 4 bits per row
+binaryData8 = de2bi(viData, 8, 'left-msb'); % convert to binary (8 bits per integer)
+binaryData = reshape(binaryData8.', [], 4); % reshape to 4 bits per row
 
 % Datamapping: M-QAM
 M = 16;     % 4 bits per row -> 16 possible values
@@ -428,7 +428,31 @@ for l=1:size(Plk,1)
 
 end
 
+%% Reconstruct Image 
 
+SlkTemp = repmat(get_drm_data_template_frame(stDRM.mode, stDRM.occupancy), size(Rlk,1)/15, 1);
+
+% Extrahiere Nutzdaten
+viReceivedDlk = Rlk(SlkTemp == 1);
+
+% QAM-Demodulation
+binaryDataReceived = qamdemod(viReceivedDlk, M, UnitAveragePower=true, OutputType='bit');
+
+% Reshape zu einer Spaltenstruktur
+binaryDataReceived = reshape(binaryDataReceived.', [], 8); % 8 Bits pro Integer
+
+% Umwandlung in Integer-Daten
+viDataReceived = bi2de(binaryDataReceived, 'left-msb');
+
+% Call-Sign entfernen (erste 6 Zeichen)
+viImageReceived = viDataReceived(7:prod(image_size)+6);
+
+% Zurück in 2D-Matrix mit ursprünglicher Bildgröße
+reconstructed_image = reshape(viImageReceived, image_size);
+
+% Anzeige des rekonstruierten Bildes
+figure(140)
+imshow(uint8(reconstructed_image));
 %% Graphical Output
 SlkTemp = repmat(get_drm_data_template_frame(stDRM.mode, stDRM.occupancy), iNofFramesNeeded, 1);
 figure(1)
