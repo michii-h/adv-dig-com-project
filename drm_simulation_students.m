@@ -111,60 +111,46 @@ vfcTransmitSignal = SlkTemp(:);
 % iG = 4;
 % vfcTransmitSignal = repmat(vfcTransmitSignal,iG,1);
 
+%% Plot Transmit Signal
+% Plot full frames
+figure(1)
+subplot(1,2,1)
+imagesc((1:stOFDM.iNfft)-get_drm_dc_position(stDRM.mode,stDRM.occupancy),0:size(Slk,1)-1,abs(Slk))
+xlabel('Subchannel k')
+ylabel('Symbol l')
 
-%% Initialize QO-100 parameters with a 90cm dish and 5W transmit power
-stSat = init_qo100_params(0.9, 5);
+% Plot constellation of data symbols
+subplot(1,2,2)
+plot(Slk(Plk == 0),'r.')
+grid
+axis square
+xlabel('I')
+ylabel('Q')
+
+
+%% Initialize Satellite Communication specific parameters for QO-100 - Adalm Pluto
+stSat = init_qo100_params();
 
 %% Channel
 % Switch Channels
-iSwitchChannel = 5; % Set to 5 for QO-100 satellite simulation
+iSwitchChannel = 1;
 
 switch iSwitchChannel
 
     case 0 % ideal channel
+        fprintf('Using ideal channel...\n');
         vfcReceiveSignal = vfcTransmitSignal;
 
     case 1 % simulated channel
+        fprintf('Using simulated channel...\n');
 
         stChannel = initChannel();
-        % vfcReceiveSignal = channel_sim(vfcTransmitSignal,stChannel,stOFDM);
+        vfcReceiveSignal = channel_sim(vfcTransmitSignal,stChannel);
 
-        % Simulate iSampleShift = 17 between Tx and Rx
-        iSampleShift = 0;
-        vfcTransmitSignal = circshift(vfcTransmitSignal,[iSampleShift 0]);
-
-
-        % Frequency- and Phase-Offset
-        vfcPhaser = exp(j*stChannel.fOmegaOffset*[0:length(vfcTransmitSignal)-1]+j*stChannel.fPhaseOffset);
-        vfcPhaser = vfcPhaser(:);
-        vfcReceiveSignal = vfcTransmitSignal.*vfcPhaser;
-
-        % sample offset
-        vfcFFT = fft(vfcReceiveSignal);
-        vOmega = 2*pi*[0:length(vfcFFT)-1].'/length(vfcFFT);
-        vfcReceiveSignal = ifft(vfcFFT.*fftshift(exp(j*vOmega*stChannel.fSampleOffset)));
-
-        % AWGN Channel
-        vfcReceiveSignal = awgn(vfcReceiveSignal,stChannel.fSNRdB);
-
-        %Multipath channel
-        vfcReceiveSignal = conv(vfcReceiveSignal,stChannel.vfImpulseResponse);
-
-    case 2 % capture with TenTec
-        vfcReceiveSignal = captureDRM(2) ;
-
-    case 3 % use Adalm Pluto for TX and RX
-       stAdalmPluto = initSDR('USB');
-       vfcReceiveSignal = LoopbackAdalmPluto(vfcTransmitSignal,stAdalmPluto);
-
-    case 4 % use ZedBoard for TX and RX
-       stZedboard = initZED();
-       vfcReceiveSignal = LoopbackZedBoard(vfcTransmitSignal,stZedboard);
-       vfcReceiveSignal =vfcReceiveSignal(:,1);
-
-    case 5 % Use Satellite Communication Toolbox for QO-100 Channel Simulation
+    case 2 % Simulate Satellite Communication for Q0-100
        fprintf('Using QO-100 satellite channel simulation...\n');
-       vfcReceiveSignal = simulate_qo100_channel(vfcTransmitSignal, stSat, stOFDM);
+
+       vfcReceiveSignal = simulate_qo100_channel(vfcTransmitSignal, stSat);
 
 end
 
@@ -204,7 +190,7 @@ fprintf('Robustness Mode: %s\n', strModes(iModeEst));
 % Number of Symbols in CaptureBuffer
 iNOfSymbols = floor(length(vfcReceiveSignal)/iNs);
 
-% Timing Recovery with CP
+% Timing Recovery with Cyclic Prefix
 vIndexGI = [0:iNg-1].';
 R = zeros(1,iNs);
 
@@ -277,7 +263,6 @@ viFrameStart(end)=[];
 viFrameSymbols = 0:iNOfSymbolsPerFrame-1;
 
 for iFrame = 1:length(viFrameStart)
-
     stRlk{iFrame} = Rlk(viFrameStart(iFrame)+viFrameSymbols,:);
 end
 
@@ -285,10 +270,59 @@ end
 Rlk = stRlk{1};
 
 %% Fine Synchronization
-% Use optimized FFT-based fine synchronization
-[Rlk, freq_offset, phase_offset] = optimize_fine_sync(Rlk, Plk, stOFDM.iNfft);
+figure(301)
+mPhase = angle(conj(Rlk).*Plk);
+%mPhase = angle(conj(Rlk).*Slk);
 
-%% Kanalschätzung und Entzerrung
+mesh([-iNfft/2:iNfft/2-1],[1:size(Plk,1)],unwrap(mPhase))
+ylabel('Symbol l')
+xlabel('Subchannel k')
+zlabel('Phase \Phi(l,k)')
+
+for l = 1:size(Plk,1)
+figure(302)
+stem([-iNfft/2:iNfft/2-1],unwrap(mPhase(l,:)))
+xlabel('Subchannel k')
+ylabel(['Phase \Phi(' num2str(l) ',k)'])
+
+
+% Linear Regression of Phases
+kPilots = [find(Plk(l,:) ~= 0)-iNfft/2-1].';
+V = [kPilots ones(size(kPilots))];
+vPhi = unwrap(mPhase(l,Plk(l,:) ~= 0)).';
+% tic;m = inv(V'*V)*V'*vPhi;toc
+% tic;m = pinv(V)*vPhi;toc
+m = V\vPhi;
+
+
+hold on
+kAxis = -iNfft/2:iNfft/2-1;
+plot(kAxis,m(1)*kAxis+m(2))
+hold off
+
+% Comensate Phase correction
+mPhaseEst = m(1)*kAxis+m(2);
+%Rlk(l,:) = Rlk(l,:) .* exp(-j*mPhaseEst);
+end
+
+% Alternative
+% mPhase = conj(Rlk).*Plk;
+% mPhase = mPhase(:,[16 48 64]+iNfft/2+1);
+
+% figure(303)
+% subplot(2,1,1)
+% stem(1:15,angle(mPhase))
+% xlabel('symbol l')
+% ylabel(['Phase \Phi(l,k=[' num2str([16 48 64]) '])'])
+
+% mPhaseFFT = fft(mPhase,1024,1);
+
+% subplot(2,1,2)
+% stem(abs(mPhaseFFT))
+% xlabel('\mu')
+% ylabel(['FFT\{\Phi(l,k=[' num2str([16 48 64]) '])\}'])
+
+%% Channel Estimation and Equalization
 dc = get_drm_dc_position(iModeEst,iOcc);
 kmin = get_drm_kmin(iModeEst,iOcc)+dc;
 kmax = get_drm_kmax(iModeEst,iOcc)+dc;
@@ -372,7 +406,7 @@ ylabel('Symbol l')
 title('Transmit Frame |Slk|')
 
 subplot(2,2,2)
-plot(Slk(SlkTemp ==1),'r.')
+plot(Slk(Plk == 0),'r.')
 grid
 axis square
 xlabel('I')
@@ -380,7 +414,7 @@ ylabel('Q')
 title('Transmit Constellation')
 
 subplot(2,2,3)
-imagesc((1:stOFDM.iNfft)-get_drm_dc_position(stDRM.mode,stDRM.occupancy),0:iNOfSymbols-1,abs(Rlk))
+imagesc((1:stOFDM.iNfft)-get_drm_dc_position(stDRM.mode,stDRM.occupancy),0:size(Rlk,1)-1,abs(Rlk))
 xlabel('Subchannel k')
 ylabel('Symbol l')
 title('Receive Frame |Rlk|')
@@ -395,39 +429,3 @@ axis([-fLimit fLimit -fLimit fLimit])
 xlabel('I')
 ylabel('Q')
 title('Receive Constellation')
-
-
-if SwitchDemoSync
-    figure(2)
-    subplot(3,2,[1 3 5])
-    mfcPhase = angle(conj(Slk).*Rlk);
-    imagesc((1:stOFDM.iNfft)-get_drm_dc_position(stDRM.mode,stDRM.occupancy),0:iNOfSymbols-1,mfcPhase)
-    xlabel('Subchannel k')
-    ylabel('Symbol l')
-    title('Phase Difference')
-
-    fpilot_position = get_drm_fpilot_position(stDRM.mode)+get_drm_dc_position(stDRM.mode,stDRM.occupancy);
-    dc_position = get_drm_dc_position(stDRM.mode,stDRM.occupancy);
-    subplot(3,2,2)
-    plot(0:iNOfSymbols-1,mfcPhase(:,fpilot_position(1)))
-    xlabel('Symbol l')
-    ylabel('Phase Difference in rad')
-    title(['1st fPilot / Subchannel:  ' num2str(fpilot_position(1)-dc_position)])
-    grid
-
-
-    subplot(3,2,4)
-    plot(0:iNOfSymbols-1,mfcPhase(:,fpilot_position(2)))
-    xlabel('Symbol l')
-    ylabel('Phase Difference in rad')
-    title(['2nd fPilot / Subchannel:  ' num2str(fpilot_position(2)-dc_position)])
-    grid
-
-
-    subplot(3,2,6)
-    plot(0:iNOfSymbols-1,mfcPhase(:,fpilot_position(3)))
-    xlabel('Symbol l')
-    ylabel('Phase Difference in rad')
-    title(['3rd fPilot / Subchannel:  ' num2str(fpilot_position(3)-dc_position)])
-    grid
-end
