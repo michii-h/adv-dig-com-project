@@ -1,5 +1,16 @@
 %% QO-100 Parameters Initialization
+% Initialize parameters for the QO-100 satellite communications
+%
+% Returns:
+%   stSat - Structure containing all satellite and link parameters
+%
+% Example:
+%   params = init_qo100_params();
 function stSat = init_qo100_params()
+    % Physical constants
+    stSat.c = 3e8;                % Speed of light (m/s)
+    stSat.k = 1.38e-23;           % Boltzmann constant (J/K)
+
     % Basic satellite parameters
     stSat.name = 'Qatar-OSCAR 100';
 
@@ -9,10 +20,10 @@ function stSat = init_qo100_params()
     stSat.nb_downlink_start = 10489.550; % MHz
     stSat.nb_downlink_end = 10489.800;   % MHz
 
-    % Center frequencies (Hz)
-    stSat.uplinkFreq = 2.4e9;          % Exact center freq
-    stSat.downlinkFreq = 10.489675e9;  % Exact center freq
-    stSat.transponderBW = 250e3;       % 250 kHz narrowband transponder
+    % Center frequencies (Hz) - calculated from transponder parameters
+    stSat.uplinkFreq = (stSat.nb_uplink_start + stSat.nb_uplink_end) * 1e6 / 2;
+    stSat.downlinkFreq = (stSat.nb_downlink_start + stSat.nb_downlink_end) * 1e6 / 2;
+    stSat.transponderBW = 2.7e3;       % Transponder bandwidth (Hz)
 
     % SDR parameters
     stSat.sampleRate = 1e6;            % 1 MSPS for Adalm Pluto
@@ -23,52 +34,73 @@ function stSat = init_qo100_params()
 
     % Link budget parameters
     stSat.eirp = 39;                   % Satellite EIRP (dBW)
-    stSat.gt = 10;                     % G/T ratio (dB/K)
+    stSat.gt = -13;                    % G/T ratio (assumed performance at satellite)
     stSat.antennaDiam = 0.9;           % Ground antenna diameter (meters)
-    stSat.rainMargin = 3;              % Rain fade margin (dB)
     stSat.targetSNR = 10;              % Target SNR (dB)
     stSat.slantRange = 35786e3;        % Geostationary orbit distance (m)
 
     % Calculate link budget
-    [stSat.txPower, stSat.linkMargin] = calculateLinkBudget(stSat);
+    [stSat.txPower, stSat.linkMargin, stSat.expectedSNR] = calculateLinkBudget(stSat);
 
     % Adjust Adalm Pluto TX gain based on calculated power
-    stSat.adalm_txGain = - min(stSat.adalm_maxTxGain, 10*log10(stSat.txPower) + 30);
+    % Higher gain means more power, so we use positive correlation
+    powerInDBm = 10*log10(stSat.txPower) + 30;  % Convert W to dBm
+    stSat.adalm_txGain = min(stSat.adalm_maxTxGain, powerInDBm);
 
+    % Print results
     fprintf('Required transmit power: %.2f dBW (%.2f W)\n', 10*log10(stSat.txPower), stSat.txPower);
-    fprintf('Link margin: %.2f dB\n', stSat.linkMargin);
+    fprintf('Link margin:  %.2f dB\n', stSat.linkMargin);
+    fprintf('Expected SNR: %.2f dB\n', stSat.expectedSNR);
     fprintf('Recommended Adalm Pluto TX gain: %.2f dB\n', stSat.adalm_txGain);
+
+    % Add warning if link margin is negative
+    if stSat.linkMargin < 0
+        warning('Link margin is negative (%.2f dB). Communication may be unreliable.', stSat.linkMargin);
+    end
 end
 
-function [txPower, margin] = calculateLinkBudget(stSat)
-    % Constants
-    c = 3e8;                % Speed of light (m/s)
-    k = 1.38e-23;           % Boltzmann constant
+function [txPower, margin, snr] = calculateLinkBudget(stSat)
+    % Common calculations
+    lambda = stSat.c / stSat.uplinkFreq;
 
-    % Wavelength calculation
-    lambda = c / stSat.uplinkFreq;
+    % Define parameters for both calculation methods
+    antennaEfficiency = 0.5;      % 50% efficiency as used in example
+    cableLength = 12;             % meters of cable
+    cableLoss = 0.3;              % dB/m for Ecoflex 7mm
 
-    % Free space path loss calculation
+    % Antenna gain calculation (with efficiency included)
+    antennaGain = 10*log10(((pi*stSat.antennaDiam)/lambda)^2 * antennaEfficiency);
+
+    % Free space path loss (using actual slant range)
     fsl = 20*log10(4*pi*stSat.slantRange/lambda);
 
-    % Antenna gain calculation
-    efficiency = 0.55;      % Typical dish efficiency
-    antennaGain = 10*log10(efficiency * (pi * stSat.antennaDiam / lambda)^2);
+    % Cable loss calculation
+    totalCableLoss = cableLength * cableLoss;
 
     % System noise calculation
     noiseTemp = 290;        % Ambient temperature (K)
     systemTemp = noiseTemp / 10^(stSat.gt/10);
-    noiseFloor = 10*log10(k * systemTemp * stSat.sampleRate);
+    noiseFloor = 10*log10(stSat.k * systemTemp * stSat.transponderBW);
 
-    % Link budget calculation
-    rxPowerAtSat = stSat.eirp - fsl + antennaGain - stSat.rainMargin;
-    margin = rxPowerAtSat - noiseFloor - stSat.targetSNR;
+    % Calculate required received power at satellite
+    requiredRxPower = noiseFloor + stSat.targetSNR;
 
-    % Calculate required transmit power in Watts
-    txPower = 10^((stSat.eirp - antennaGain) / 10);
+    % Calculate required transmit power (dBW)
+    requiredTxPowerDB = requiredRxPower + fsl + totalCableLoss - antennaGain;
 
-    % Log detailed calculations for debugging
-    fprintf('Free space path loss: %.2f dB\n', fsl);
-    fprintf('Antenna gain: %.2f dBi\n', antennaGain);
-    fprintf('Noise floor: %.2f dBW\n', noiseFloor);
+    % Convert to linear power (Watts)
+    txPower = 10^(requiredTxPowerDB/10);
+
+    % Calculate actual SNR with this power
+    rxPowerAtSat = 10*log10(txPower) + antennaGain - fsl - totalCableLoss;
+    snr = rxPowerAtSat - noiseFloor;
+    margin = snr - stSat.targetSNR;
+
+    % ---- Print results ----
+    fprintf('Link budget calculations:\n');
+    fprintf(' Free space path loss: %.2f dB\n', fsl);
+    fprintf(' Antenna gain: %.2f dBi\n', antennaGain);
+    fprintf(' Cable loss: %.2f dB\n', totalCableLoss);
+    fprintf(' Noise floor: %.2f dBW\n', noiseFloor);
+    fprintf(' Required TX power: %.2f dBW (%.4f W)\n', requiredTxPowerDB, txPower);
 end
