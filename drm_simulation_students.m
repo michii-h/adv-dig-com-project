@@ -26,7 +26,7 @@ Slk = get_drm_data_template_frame(stDRM.mode, stDRM.occupancy);
 
 % Load Image
 image = imread('image.png');
-
+%image = image(1:20,1:20,:);
 image_size = size(image);
 
 viImage = image(:)';
@@ -43,12 +43,13 @@ viData = [call_sign, viImage];
 % viData -> n x 256
 %viData = reshape
 
-binaryData8 = de2bi(viData, 8, 'left-msb'); % convert to binary (8 bits per integer)
-binaryData = reshape(binaryData8.', [], 4); % reshape to 4 bits per row
+%binaryData = de2bi(viData, 8, 'left-msb'); % convert to binary (8 bits per integer)
+%binaryData = reshape(binaryData8.', [], 4); % reshape to 4 bits per row
 
 % Datamapping: M-QAM
-M = 16;     % 4 bits per row -> 16 possible values
-viDlk = qammod(binaryData,M,UnitAveragePower=true, InputType='bit');
+M = 256;     % 4 bits per row -> 16 possible values
+%viDlk = qammod(binaryData,M,UnitAveragePower=true, InputType='bit');
+viDlk = qammod(viData,M);
 viDlk = reshape(viDlk.',1,[]); % concat rows one after another
 
 % Set Data in Slk
@@ -119,7 +120,7 @@ stSat = init_qo100_params();
 
 %% Channel
 % Switch Channels
-iSwitchChannel = 1;
+iSwitchChannel = 0;
 
 switch iSwitchChannel
 
@@ -282,28 +283,34 @@ Rlk = channel_estimation_equalization(Rlk, Plk, stOFDM.iNfft, stOFDM.iNg, iModeE
 SlkTemp = repmat(get_drm_data_template_frame(stDRM.mode, stDRM.occupancy), size(Rlk,1)/15, 1);
 
 % Extrahiere Nutzdaten
-viReceivedDlk = Rlk(SlkTemp == 1);
+
+% Initialisiere eine leere Liste für extrahierte Werte
+viReceivedDlk = [];
+
+% Gehe jede Zeile von Rlk durch und extrahiere die entsprechenden Werte
+for iRow = 1:size(Rlk, 1)
+    % Extrahiere nur die Werte in der aktuellen Zeile, wo SlkTemp == 1 ist
+    viReceivedDlk = [viReceivedDlk, Rlk(iRow, SlkTemp(iRow, :) == 1)];
+end
 
 % QAM-Demodulation
-binaryDataReceived = qamdemod(viReceivedDlk, M, UnitAveragePower=true, OutputType='bit');
+binaryDataReceived = qamdemod(viReceivedDlk', M);
 
 % Reshape zu einer Spaltenstruktur
-binaryDataReceived = reshape(binaryDataReceived.', [], 8); % 8 Bits pro Integer
+%binaryDataReceived = reshape(binaryDataReceived, [], 8); % 8 Bits pro Integer
 
 % Umwandlung in Integer-Daten
-viDataReceived = bi2de(binaryDataReceived, 'left-msb');
+%viDataReceived = bi2de(binaryDataReceived, 8,'left-msb');
 
 % Call-Sign entfernen (erste 6 Zeichen)
-viImageReceived = viDataReceived(7:prod(image_size)+6);
+viImageReceived = binaryDataReceived(7:prod(image_size)+6);
 
-% Zur?ck in 2D-Matrix mit urspr?nglicher Bildgr??e
+% Zurück in 2D-Matrix mit urspr?nglicher Bildgr??e
 reconstructed_image = reshape(viImageReceived, image_size);
 
 % Anzeige des rekonstruierten Bildes
 figure(140)
 imshow(uint8(reconstructed_image));
-
-plot(xcorr(abs(viDataReceived),abs(viDlk))) %todo
 %% Graphical Output
 SlkTemp = repmat(get_drm_data_template_frame(stDRM.mode, stDRM.occupancy), iNofFramesNeeded, 1);
 figure(1)
