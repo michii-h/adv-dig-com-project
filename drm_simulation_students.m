@@ -1,8 +1,8 @@
 %% OFDM Development Enviroment
-clc
-close all
-clear all
+start_up;
+
 SwitchDemoSync = false; % additional plots for Demo
+
 %% DRM Initialization
 % stDRM Mode
 stDRM.mode = 2; % Corresponds to Mode B
@@ -110,24 +110,8 @@ SlkTemp = SlkTemp.';
 vfcTransmitSignal = SlkTemp(:);
 
 % Repeat iG Frames
-iG = 5;
+iG = 3;
 vfcTransmitSignal = repmat(vfcTransmitSignal,iG,1);
-
-%% Plot Transmit Signal
-% Plot full frames
-figure(1)
-subplot(1,2,1)
-imagesc((1:stOFDM.iNfft)-get_drm_dc_position(stDRM.mode,stDRM.occupancy),0:size(Slk,1)-1,abs(Slk))
-xlabel('Subchannel k')
-ylabel('Symbol l')
-
-% Plot constellation of data symbols
-subplot(1,2,2)
-plot(Slk(Plk == 0),'r.')
-grid
-axis square
-xlabel('I')
-ylabel('Q')
 
 %% Initialize Satellite Communication specific parameters for QO-100 - Adalm Pluto
 % Link budget calculation etc
@@ -135,7 +119,7 @@ stSat = init_qo100_params();
 
 %% Channel
 % Switch Channels
-iSwitchChannel = 2;
+iSwitchChannel = 1;
 
 switch iSwitchChannel
 
@@ -211,16 +195,13 @@ end
 [~ ,iStartSample] = max(abs(R));
 dOmegaEst = angle(R(iStartSample))/iNfft;
 
-% Compensate Frequemncy Offset
+% Compensate Frequency Offset
 vfcPhaser = exp(-j*dOmegaEst*[0:length(vfcReceiveSignal)-1]);
 vfcPhaser = vfcPhaser(:);
-%vfcReceiveSignal = vfcReceiveSignal .* vfcPhaser;
+vfcReceiveSignal = vfcReceiveSignal .* vfcPhaser;
 
 % Adjust to Start Sample
 vfcReceiveSignal = vfcReceiveSignal(iStartSample:end);
-iNOfSymbols = floor(length(vfcReceiveSignal)/iNs);
-vfcReceiveSignal = vfcReceiveSignal(1:iNOfSymbols*iNs);
-
 
 if SwitchDemoSync
     figure(101)
@@ -231,10 +212,15 @@ if SwitchDemoSync
     plot(iStartSample, abs(R(iStartSample)),'ro')
     hold off
 
-    figure;
-    plot(abs(sum(reshape(filter(ones(1,iNg),1,vfcReceiveSignal.*conj(circshift(vfcReceiveSignal,[iNfft 0]))),iNs,iNOfSymbols),2)))
+    % figure;
+    % plot(abs(sum(reshape(filter(ones(1,iNg),1,vfcReceiveSignal.*conj(circshift(vfcReceiveSignal,[iNfft 0]))),iNs,iNOfSymbols),2)))
 end
+
 %% OFDM Demodulator
+% Ensure vfcReceiveSignal is divisible by iNs
+iNOfSymbols = floor(length(vfcReceiveSignal)/iNs);
+vfcReceiveSignal = vfcReceiveSignal(1:iNOfSymbols*iNs);
+
 % Serial to Parallel Conversion
 RlkTemp = reshape(vfcReceiveSignal,stOFDM.iNs,[]).';
 
@@ -247,7 +233,7 @@ Rlk = fftshift(fft(RlkTemp,stOFDM.iNfft,2),2);
 %% Frame Detection
 % Generate Pilots
 Plk = get_drm_pilot_frame(iModeEst,3);
-% Calczlate Correlation Metrik
+% Calculate Correlation Metrik
 Mlk = xcorr2(Rlk,Plk);
 Mlk(1:iNOfSymbolsPerFrame-1,:) = [];
 
@@ -284,145 +270,12 @@ Rlk = vertcat(stRlk{1:end});
 iNOfSymbols = iNofFramesNeeded * iNOfSymbolsPerFrame;
 
 %% Fine Synchronization
-mPhaseEst = zeros(iNOfFrames,iNfft);
-mPhaseFFT = zeros(1024*iNOfFrames,iNfft);
-for i = 1:iNofFramesNeeded-1
-iFrameStart = (i-1)*15+1;
-RlkTemp = Rlk(iFrameStart:iFrameStart+14,:);
-mPhase = angle(conj(RlkTemp).*Plk);
+% Use the fine_sync function to perform linear phase correction
+Rlk = fine_sync(Rlk, Plk, iNfft, iNOfSymbolsPerFrame, SwitchDemoSync);
 
-if SwitchDemoSync
-    figure(301)
-    mesh([-iNfft/2:iNfft/2-1],[1:size(Plk,1)],unwrap(mPhase))
-    ylabel('Symbol l')
-    xlabel('Subchannel k')
-    zlabel('Phase \Phi(l,k)')
-end
-
-
-for l = 1:size(Plk,1)
-if SwitchDemoSync
-    figure(302)
-    stem([-iNfft/2:iNfft/2-1],unwrap(mPhase(l,:)))
-    xlabel('Subchannel k')
-    ylabel(['Phase \Phi(' num2str(l) ',k)'])
-end
-
-% Linear Regression of Phases
-kPilots = [find(Plk(l,:) ~= 0)-iNfft/2-1].';
-V = [kPilots ones(size(kPilots))];
-vPhi = unwrap(mPhase(l,Plk(l,:) ~= 0)).';
-% tic;m = inv(V'*V)*V'*vPhi;toc
-% tic;m = pinv(V)*vPhi;toc
-m = V\vPhi;
-
-kAxis = -iNfft/2:iNfft/2-1;
-
-if SwitchDemoSync
-    hold on
-    plot(kAxis,m(1)*kAxis+m(2))
-    hold off
-end
-
-% Comensate Phase correction
-mPhaseEst(i,:) = m(1)*kAxis+m(2);
-Rlk(iFrameStart:iFrameStart+l-1,:) = Rlk(iFrameStart:iFrameStart+l-1,:) .* exp(-j*mPhaseEst(i,:));
-end
-
-
-% Alternative
-% mPhase = conj(Rlk).*Plk;
-% mPhase = mPhase(:,[16 48 64]+iNfft/2+1);
-
-if SwitchDemoSync
-    figure(303)
-    subplot(2,1,1)
-    stem(1:15,angle(mPhase))
-    xlabel('symbol l')
-    ylabel(['Phase \Phi(l,k=[' num2str([16 48 64]) '])'])
-end
-
-mPhaseFFT(i:i+1023,:) = fft(mPhase,1024,1);
-end
-
-if SwitchDemoSync
-    subplot(2,1,2)
-    stem(abs(mPhaseFFT))
-    xlabel('\mu')
-    ylabel(['FFT\{\Phi(l,k=[' num2str([16 48 64]) '])\}'])
-end
-%% Kanalschätzung und Entzerrung
-dc = get_drm_dc_position(iModeEst,iOcc);
-kmin = get_drm_kmin(iModeEst,iOcc)+dc;
-kmax = get_drm_kmax(iModeEst,iOcc)+dc;
-kInterpolate = kmin:kmax;
-
-for l=1:size(Plk,1)
-
-    cInterpolater = 'Wiener';
-
-    switch cInterpolater
-        case 'Spline'
-            % Channel Estimation -- symbol by symbol
-            kIndex = find(Plk(l,:) ~= 0);
-            Hk = Rlk(l,kIndex)./Plk(l,kIndex);
-            Hint = zeros(1,stOFDM.iNfft);
-            Hint(kInterpolate) = interp1(kIndex,Hk,kInterpolate);
-
-            % Equalization -- symbol by symbol
-            Rlk(l,kInterpolate) = Rlk(l,kInterpolate)./Hint(kInterpolate);
-
-        case 'Wiener'
-
-            % Korrelations Matrix R
-            kIndex = find(Plk(l,:) ~= 0);
-            mIndex = [];
-            for k=kIndex
-                mIndex = [mIndex ; kIndex-k];
-            end
-            Omega_g = 0.3*1/mean(diff(kIndex));
-            Omega_g = 0.5*1/stOFDM.iNg;
-            R_ = sinc(mIndex*Omega_g);
-            SNR = 50;
-            N = 10^(-SNR/10);
-            R = R_+eye(size(R_,1))*N;
-
-            Hint = zeros(1,stOFDM.iNfft);
-            Hk = Rlk(l,kIndex)./Plk(l,kIndex);
-            Hk = Hk(:);
-            for k = kInterpolate
-
-                % Observation Vector b
-                vIndex = kIndex - k;
-                b = sinc(vIndex*Omega_g);
-                b = b(:);
-
-                % Wiener Filter g
-                g = inv(R)*b;
-
-                % Apply Wiener Filter
-                Hint(k) = g.' * Hk;
-
-            end
-
-
-            if SwitchDemoSync
-            figure(10)
-            stem(abs(Hint))
-            hold on
-            plot(kIndex,abs(Hk),'ro')
-            hold off
-            end
-
-
-            % Eqialization
-            Rlk(l,kInterpolate) = Rlk(l,kInterpolate)./Hint(kInterpolate);
-
-    end
-    Hint(kInterpolate) = Hint(kInterpolate).*hamming(1,length(kInterpolate));
-    h_est = ifft( fftshift(Hint));
-
-end
+%% Channel Estimation and Equalization
+cInterpolater = 'Wiener';  % 'Spline' or 'Wiener'
+Rlk = channel_estimation_equalization(Rlk, Plk, stOFDM.iNfft, stOFDM.iNg, iModeEst, iOcc, cInterpolater, SwitchDemoSync);
 
 %% Reconstruct Image
 
@@ -443,7 +296,7 @@ viDataReceived = bi2de(binaryDataReceived, 'left-msb');
 % Call-Sign entfernen (erste 6 Zeichen)
 viImageReceived = viDataReceived(7:prod(image_size)+6);
 
-% Zurück in 2D-Matrix mit ursprünglicher Bildgröße
+% Zur?ck in 2D-Matrix mit urspr?nglicher Bildgr??e
 reconstructed_image = reshape(viImageReceived, image_size);
 
 % Anzeige des rekonstruierten Bildes
@@ -461,9 +314,9 @@ ylabel('Symbol l')
 title('Transmit Frame |Slk|')
 
 subplot(2,2,2)
-plot(Slk(Plk == 0),'r.')
+plot(Slk(SlkTemp ==1),'r.')
 grid
-%axis square
+axis square
 xlabel('I')
 ylabel('Q')
 title('Transmit Constellation')
