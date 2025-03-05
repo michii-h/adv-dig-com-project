@@ -133,7 +133,7 @@ stSat = init_qo100_params();
 
 %% Channel
 % Switch Channels
-iSwitchChannel = 1;
+iSwitchChannel = 2;
 
 switch iSwitchChannel
 
@@ -148,8 +148,6 @@ switch iSwitchChannel
         vfcReceiveSignal = channel_sim(vfcTransmitSignal,stChannel);
 
     case 2 % Simulate Satellite Communication for Q0-100
-       fprintf('Using QO-100 satellite channel simulation...\n');
-
        vfcReceiveSignal = simulate_qo100_channel(vfcTransmitSignal, stSat);
 
     case 3 % Use Adalm Pluto

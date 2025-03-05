@@ -12,7 +12,9 @@ function vfcReceiveSignal = simulate_qo100_channel(vfcTransmitSignal, stSat)
 
     fprintf('Simulating QO-100 satellite channel with Link Margin: %.2f dB\n', stSat.linkMargin);
 
-    % Create the satellite channel object
+    % 0. Apply tx power scaling based on Adalm Pluto gain
+    scaleFactor = 10^(-stSat.adalm_txGain/20); % Convert dB to amplitude scaling; Adalm Pluto gain is negative
+    vfcTransmitSignal = vfcTransmitSignal * scaleFactor;
 
     % 1. Apply path loss and power scaling based on link budget
     scaleFactor = 10^(-stSat.linkMargin/20); % Convert dB to amplitude scaling
