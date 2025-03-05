@@ -17,7 +17,7 @@ function stSat = init_qo100_params()
     % SDR parameters
     stSat.sampleRate = 1e6;            % 1 MSPS for Adalm Pluto
     stSat.adalm_txGain = 0;            % Initial TX gain (dB), adjust based on link budget
-    stSat.adalm_rxGain = 30;           % Initial RX gain (dB)
+    stSat.adalm_rxGain = 60;           % Initial RX gain (dB)
     stSat.adalm_maxTxGain = 89;        % Maximum TX gain for Adalm Pluto
     stSat.adalm_bpsk_symbolRate = 2400; % Common symbol rate for NB digital modes
 
@@ -33,7 +33,7 @@ function stSat = init_qo100_params()
     [stSat.txPower, stSat.linkMargin] = calculateLinkBudget(stSat);
 
     % Adjust Adalm Pluto TX gain based on calculated power
-    stSat.adalm_txGain = min(stSat.adalm_maxTxGain, 10*log10(stSat.txPower) + 30);
+    stSat.adalm_txGain = - min(stSat.adalm_maxTxGain, 10*log10(stSat.txPower) + 30);
 
     fprintf('Required transmit power: %.2f dBW (%.2f W)\n', 10*log10(stSat.txPower), stSat.txPower);
     fprintf('Link margin: %.2f dB\n', stSat.linkMargin);

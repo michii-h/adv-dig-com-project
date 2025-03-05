@@ -152,6 +152,11 @@ switch iSwitchChannel
 
        vfcReceiveSignal = simulate_qo100_channel(vfcTransmitSignal, stSat);
 
+    case 3 % Use Adalm Pluto
+        fprintf('Using Adalm Pluto...\n');
+        stAdalmPluto = initSDR(stSat.sampleRate, stSat.fc, stSat.TxGain, stSat.RxGain);
+        vfcReceiveSignal = LoopbackAdalmPluto(vfcTransmitSignal, stAdalmPluto);
+
 end
 
 %% Detect Robustness Mode
