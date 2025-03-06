@@ -279,7 +279,7 @@ Plk = get_drm_pilot_frame(iModeEst,iOcc);
 % Plk = repmat(Plk,[iNofFramesNeeded 1]);
 
 % Call the fine synchronization function for each frame to correct phase errors
-for iFrame = 1:iNOfFramesNeeded
+for iFrame = 1:iNofFramesNeeded
     icurFrameStart = (iFrame-1)*iNOfSymbolsPerFrame+1;
     icurFrameEnd = iFrame*iNOfSymbolsPerFrame;
     Rlk(icurFrameStart:icurFrameEnd,:) = fine_sync(Rlk(icurFrameStart:icurFrameEnd,:), Plk, iNfft, SwitchDemoSync);
