@@ -29,41 +29,46 @@ image = imread('image.png');
 %image = image(1:20,1:20,:);
 image_size = size(image);
 
+% Reconstruct the image to a vector
 viImage = image(:)';
-
-% Reconstruct the image from the vector
-% reconstructed_image = reshape(vector, size(image));
 
 % Concat Call Sign
 call_sign = uint8(double('DL0FHR'));
 viData = [call_sign, viImage];
 
-% mData = reshape( , 256);
+%convert to binary 8-bits per integer
+binaryData8 = de2bi(viData, 8, 'left-msb');
 
-% viData -> n x 256
-%viData = reshape
+% reshape to 4-bits per row
+[m,n]=size(binaryData8);
+binaryData4 = reshape(binaryData8', n/2, m*2)';
 
-%binaryData = de2bi(viData, 8, 'left-msb'); % convert to binary (8 bits per integer)
-%binaryData = reshape(binaryData8.', [], 4); % reshape to 4 bits per row
+% converte back to integer
+viData = bi2de(binaryData4,'left-msb');
 
 % Datamapping: M-QAM
-M = 256;     % 4 bits per row -> 16 possible values
-%viDlk = qammod(binaryData,M,UnitAveragePower=true, InputType='bit');
+M = 16;     % 4 bits per row -> 16 possible values
 viDlk = qammod(viData,M);
-viDlk = reshape(viDlk.',1,[]); % concat rows one after another
+
+% concat rows one after another
+viDlk = reshape(viDlk.',1,[]); 
 
 % Set Data in Slk
-vSlk = reshape(Slk',1,[]); % concat rows one after another
+vSlk = reshape(Slk',1,[]);
 
-% Preallocate viDataPadded
+% Calculate Data per Frame 
 DataPerFrame = sum(vSlk);
 
-% Pad Data with Zeros at Pilot Positions
+% Calculate needed number of Frames
 slkCtr = 1;
 dataCtr = 1;
 resultCtr = 1;
 iNofFramesNeeded = ceil( size(viDlk, 2) / DataPerFrame );
+
+% Preallocate viDataPadded
 viDataPadded = zeros(1, iNofFramesNeeded);
+
+% Pad Data with Zeros at Pilot Positions
 while dataCtr <= size(viDlk, 2)
     if vSlk(slkCtr) == 1
         viDataPadded(resultCtr) = viDlk(dataCtr);
@@ -75,7 +80,7 @@ while dataCtr <= size(viDlk, 2)
     resultCtr = resultCtr + 1;
 end
 
-% Padding at end for full DRM frames
+% Zeropadding at end for full DRM frames
 nRows = ceil(size(viDataPadded, 2) / 256);
 nRowsPad = 15 - mod(nRows, 15);
 nRows = nRows + nRowsPad;
@@ -83,11 +88,9 @@ nRows = nRows + nRowsPad;
 zData = zeros(1, nRows * 256);
 zData(1:size(viDataPadded,2)) = viDataPadded;
 
+% Reshape to Frameshape
 viDataPadded = reshape(zData, 256, [])';
-Dlk = viDataPadded;
-
-% Slk(Slk == 1) = Dlk(Slk == 1);
-Slk = Dlk;
+Slk = viDataPadded;
 
 % Generate Pilots
 Plk = get_drm_pilot_frame(stDRM.mode,stDRM.occupancy);
@@ -267,7 +270,7 @@ for iFrame = 1:length(viFrameStart)
 end
 
 % Run first Frame
-Rlk = vertcat(stRlk{1:end});
+Rlk = vertcat(stRlk{1:iNofFramesNeeded});
 iNOfSymbols = iNofFramesNeeded * iNOfSymbolsPerFrame;
 
 %% Fine Synchronization
@@ -280,70 +283,78 @@ Rlk = channel_estimation_equalization(Rlk, Plk, stOFDM.iNfft, stOFDM.iNg, iModeE
 
 %% Reconstruct Image
 
+% Template for the extraction of the data
 SlkTemp = repmat(get_drm_data_template_frame(stDRM.mode, stDRM.occupancy), size(Rlk,1)/15, 1);
 
-% Extrahiere Nutzdaten
-
-% Initialisiere eine leere Liste für extrahierte Werte
+% initialize empty vektor for the data
 viReceivedDlk = [];
 
-% Gehe jede Zeile von Rlk durch und extrahiere die entsprechenden Werte
+% fill the vektor row by row with the data from Rlk
 for iRow = 1:size(Rlk, 1)
-    % Extrahiere nur die Werte in der aktuellen Zeile, wo SlkTemp == 1 ist
     viReceivedDlk = [viReceivedDlk, Rlk(iRow, SlkTemp(iRow, :) == 1)];
 end
 
 % QAM-Demodulation
-binaryDataReceived = qamdemod(viReceivedDlk', M);
+DataReceived = qamdemod(viReceivedDlk', M);
 
-% Reshape zu einer Spaltenstruktur
-%binaryDataReceived = reshape(binaryDataReceived, [], 8); % 8 Bits pro Integer
+% Convert Data to binary
+binaryData4 = de2bi(DataReceived, 4, 'left-msb'); 
 
-% Umwandlung in Integer-Daten
-%viDataReceived = bi2de(binaryDataReceived, 8,'left-msb');
+% reshape Data to 8-bit per row
+[m,n]=size(binaryData4);
+binaryData8 = reshape(binaryData4', n*2, m/2)'; 
 
-% Call-Sign entfernen (erste 6 Zeichen)
-viImageReceived = binaryDataReceived(7:prod(image_size)+6);
+% Reconversion to integer
+viReceivedData = bi2de(binaryData8,'left-msb');
 
-% Zurück in 2D-Matrix mit urspr?nglicher Bildgr??e
+% extract Call-Sign
+Received_call_sign = viReceivedData(1:6);
+fprintf('Received call sign: %s\n', char(Received_call_sign));
+viImageReceived = viReceivedData(7:prod(image_size)+6);
+
+% reconstruct image from Received data
 reconstructed_image = reshape(viImageReceived, image_size);
 
-% Anzeige des rekonstruierten Bildes
-figure(140)
-imshow(uint8(reconstructed_image));
 %% Graphical Output
 SlkTemp = repmat(get_drm_data_template_frame(stDRM.mode, stDRM.occupancy), iNofFramesNeeded, 1);
 figure(1)
-subplot(2,2,1)
+subplot(2,3,1)
 imagesc((1:stOFDM.iNfft)-get_drm_dc_position(stDRM.mode,stDRM.occupancy),0:size(Slk,1)-1,abs(Slk))
 xlabel('Subchannel k')
 ylabel('Symbol l')
 title('Transmit Frame |Slk|')
 
-subplot(2,2,2)
+subplot(2,3,2)
 plot(Slk(SlkTemp ==1),'r.')
 grid
+fLimit = max(max(abs(Slk(SlkTemp ==1))));
 axis square
+axis([-fLimit fLimit -fLimit fLimit])
 xlabel('I')
 ylabel('Q')
 title('Transmit Constellation')
 
-subplot(2,2,3)
+subplot(2,3,3)
+imshow(uint8(image));
+
+subplot(2,3,4)
 imagesc((1:stOFDM.iNfft)-get_drm_dc_position(stDRM.mode,stDRM.occupancy),0:size(Rlk,1)-1,abs(Rlk))
 xlabel('Subchannel k')
 ylabel('Symbol l')
 title('Receive Frame |Rlk|')
 
-subplot(2,2,4)
+subplot(2,3,5)
 plot(Rlk(SlkTemp ==1),'r.')
 grid
 fLimit = max(max(abs(Rlk(SlkTemp ==1))));
 axis square
 axis([-fLimit fLimit -fLimit fLimit])
-
 xlabel('I')
 ylabel('Q')
 title('Receive Constellation')
+
+subplot(2,3,6)
+imshow(uint8(reconstructed_image));
 
 
 if SwitchDemoSync
