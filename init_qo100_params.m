@@ -15,10 +15,10 @@ function stSat = init_qo100_params()
     stSat.name = 'Qatar-OSCAR 100';
 
     % QO-100 Narrowband Transponder parameters (MHz)
-    stSat.nb_uplink_start = 2400.050;  % MHz
-    stSat.nb_uplink_end = 2400.300;    % MHz
-    stSat.nb_downlink_start = 10489.550; % MHz
-    stSat.nb_downlink_end = 10489.800;   % MHz
+    stSat.nb_uplink_start = 2400.150;  % MHz
+    stSat.nb_uplink_end = 2400.245;    % MHz
+    stSat.nb_downlink_start = 10489.650; % MHz
+    stSat.nb_downlink_end = 10489.745;   % MHz
 
     % Center frequencies (Hz) - calculated from transponder parameters
     stSat.uplinkFreq = (stSat.nb_uplink_start + stSat.nb_uplink_end) * 1e6 / 2;
@@ -27,13 +27,13 @@ function stSat = init_qo100_params()
 
     % SDR parameters
     stSat.sampleRate = 1e6;            % 1 MSPS for Adalm Pluto
-    stSat.oversampling_factor = 10;    % The actual sample rate will be multiplied by this in the SDR
-    stSat.adalm_rxGain = 60;           % Initial RX gain (dB)
+    stSat.oversampling_factor = 2;    % The actual sample rate will be multiplied by this in the SDR
+    stSat.adalm_rxGain = 50;           % Initial RX gain (dB)
     % For Adalm Pluto, TX gain range is -89.75 to 0 dB (0 is maximum power)
     stSat.adalm_minTxGain = -89.75;    % Minimum TX gain for Adalm Pluto
     stSat.adalm_maxTxGain = 0;         % Maximum TX gain for Adalm Pluto (0 is maximum power)
 
-    stSat.adalm_max_power_dbm = 100;    % Typical max power for Adalm Pluto
+    stSat.adalm_max_power_dbm = 7 + 50;  
 
     % Link budget parameters
     stSat.eirp = 39;                   % Satellite EIRP (dBW)

@@ -19,10 +19,14 @@ function stAdalmPluto = initSDR(stSat)
 % stAdalmPluto.RxGain = 50;  % Radio receiver gain in dB, specified as a scalar from -4 to 71
 
 stAdalmPluto.fs = stSat.sampleRate;     % Symbol rate
-stAdalmPluto.fc = stSat.fc;             % Carrier center Frequency
+stAdalmPluto.fc = stSat.uplinkFreq;             % Carrier center Frequency
 stAdalmPluto.TxGain = stSat.adalm_txGain; % Gain, specified as a scalar from -89.75 to 0 dB with a resolution of 0.25 dB
 stAdalmPluto.RxGain = stSat.adalm_rxGain;  % Radio receiver gain in dB, specified as a scalar from -4 to 71
 
-stAdalmPluto.max_power_dbm  = adalm_max_power_dbm;
+stAdalmPluto.max_power_dbm  = stSat.adalm_max_power_dbm;
+
+transponderShift = 8089.5e6;
+Lo = 9750e6;
+stAdalmPluto.fcRx = stSat.uplinkFreq + transponderShift - Lo;
 
 end

@@ -1,4 +1,4 @@
-function [vfcCaptureBuffer] = LoopbackAdalmPluto(vfcTransmitSignal,stAdalmPluto)
+function [vfcCaptureBuffer] = LoopbackAdalmPluto(vfcTransmitSignal,stAdalmPluto, i)
     % Normalize input signal to avoid clipping
     x = vfcTransmitSignal(:);
 
@@ -26,16 +26,18 @@ function [vfcCaptureBuffer] = LoopbackAdalmPluto(vfcTransmitSignal,stAdalmPluto)
 
     % Ensure TX gain is within valid range for Adalm Pluto (-89.75 to 0 dB)
     TxGain = min(0, max(-89.75, stAdalmPluto.TxGain));
-    RxGain = min(71, max(-4, stAdalmPluto.RxGain));  % RX gain range: -4 to 71 dB
+    RxGain = min(71, max(-4, stAdalmPluto.RxGain));
 
     % Calculate approximate output power based on gain setting
     approxPowerDbm = stAdalmPluto.max_power_dbm + TxGain;  % Reduce by gain amount (negative dB)
 
-    fprintf('Using Adalm Pluto with:\n');
-    fprintf(' - Sample Rate: %.3f MHz\n', fs/1e6);
-    fprintf(' - TX Gain: %.2f dB (range: -89.75 to 0 dB, where 0 dB is max power)\n', TxGain);
-    fprintf(' - Approximate TX Power: %.2f dBm\n', approxPowerDbm);
-    fprintf(' - RX Gain: %.2f dB (range: -4 to 71 dB)\n', RxGain);
+    if i==1
+        fprintf('Using Adalm Pluto with:\n');
+        fprintf(' - Sample Rate: %.3f MHz\n', fs/1e6);
+        fprintf(' - TX Gain: %.2f dB (range: -89.75 to 0 dB, where 0 dB is max power)\n', TxGain);
+        fprintf(' - Approximate TX Power: %.2f dBm\n', approxPowerDbm);
+        fprintf(' - RX Gain: %.2f dB\n', RxGain);
+    end
 
     % Set up TX Radio
     tx = sdrtx('Pluto');
@@ -53,14 +55,16 @@ function [vfcCaptureBuffer] = LoopbackAdalmPluto(vfcTransmitSignal,stAdalmPluto)
     rx.OutputDataType       = 'double';
 
     % Pass data through radio
+    if i==1
     fprintf('\nStarting transmission.\n')
+    end
     transmitRepeat(tx,txWaveform);
 
     captureLength = 2*length(x)*iOsf;
+    if i==1
     fprintf('\nStarting capturing.\n')
-
+    end
     vfcCaptureBuffer = capture(rx, captureLength, 'Samples');
-
 
     vfcCaptureBuffer = resample(vfcCaptureBuffer,1,iOsf);
 

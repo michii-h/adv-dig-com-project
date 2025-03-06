@@ -37,7 +37,7 @@ SlkTemp = SlkTemp.';
 vfcTransmitSignal = SlkTemp(:);
 
 % Repeat iG Frames
-iG = 3;
+iG = 2;
 vfcTransmitSignal = repmat(vfcTransmitSignal,iG,1);
 
 %% Initialize Satellite Communication specific parameters for QO-100 - Adalm Pluto
@@ -46,7 +46,7 @@ stSat = init_qo100_params();
 
 %% Channel
 % Switch Channels
-iSwitchChannel = 2;
+iSwitchChannel = 3;
 
 switch iSwitchChannel
 
@@ -65,12 +65,25 @@ switch iSwitchChannel
 
     case 3 % Use Adalm Pluto
         fprintf('Using Adalm Pluto...\n');
-        stAdalmPluto = initSDR(stSat.sampleRate, stSat.fc, stSat.adalm_txGain, stSat.adalm_rxGain);
+        stAdalmPluto = initSDR(stSat);
         % Pass oversampling factor if needed
         if isfield(stSat, 'oversampling_factor')
             stAdalmPluto.oversampling_factor = stSat.oversampling_factor;
         end
-        vfcReceiveSignal = LoopbackAdalmPluto(vfcTransmitSignal, stAdalmPluto);
+        
+        vfcReceiveSignal = LoopbackAdalmPluto(vfcTransmitSignal, stAdalmPluto, 1);
+
+        % iFrameLength = stOFDM.iNs*iNOfSymbols*10;
+        % iNOfTransmits = size(vfcTransmitSignal) / iFrameLength;
+        % 
+        % vfcReceiveSignal = zeros(size(vfcTransmitSignal));
+        % 
+        % for i = 1:iNOfTransmits
+        %     startIdx = ((i-1)*iFrameLength)+1;
+        %     endIdx = startIdx + iFrameLength;
+        %     buf = LoopbackAdalmPluto(vfcTransmitSignal(startIdx:endIdx), stAdalmPluto, i);
+        %     vfcReceiveSignal(startIdx:endIdx) = buf(1:iFrameLength+1);
+        % end
 
 end
 
