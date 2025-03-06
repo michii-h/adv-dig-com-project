@@ -18,89 +18,12 @@ stOFDM.iNg = get_drm_n_guard(stDRM.mode,stDRM.occupancy);
 stOFDM.iNs = stOFDM.iNfft + stOFDM.iNg;
 
 %% Generate DRM Frame
+% Call the function to generate the DRM frame
+image_path = 'image.png';
+[Slk, M, image_size, iNofFramesNeeded, iNOfFrames] = generate_drm_frame(stDRM, image_path, 'DL0FHR');
+
 % Number of Symbols per frame
 iNOfSymbols = get_drm_symbols_per_frame(stDRM.mode);
-
-% Initialize Frame Matrix
-Slk = get_drm_data_template_frame(stDRM.mode, stDRM.occupancy);
-
-% Load Image
-image = imread('image.png');
-%image = image(1:20,1:20,:);
-image_size = size(image);
-
-% Reconstruct the image to a vector
-viImage = image(:)';
-
-% Concat Call Sign
-call_sign = uint8(double('DL0FHR'));
-viData = [call_sign, viImage];
-
-%convert to binary 8-bits per integer
-binaryData8 = de2bi(viData, 8, 'left-msb');
-
-% reshape to 4-bits per row
-[m,n]=size(binaryData8);
-binaryData4 = reshape(binaryData8', n/2, m*2)';
-
-% converte back to integer
-viData = bi2de(binaryData4,'left-msb');
-
-% Datamapping: M-QAM
-M = 16;     % 4 bits per row -> 16 possible values
-viDlk = qammod(viData,M);
-
-% concat rows one after another
-viDlk = reshape(viDlk.',1,[]);
-
-% Set Data in Slk
-vSlk = reshape(Slk',1,[]);
-
-% Calculate Data per Frame
-DataPerFrame = sum(vSlk);
-
-% Calculate needed number of Frames
-slkCtr = 1;
-dataCtr = 1;
-resultCtr = 1;
-iNofFramesNeeded = ceil( size(viDlk, 2) / DataPerFrame );
-
-% Preallocate viDataPadded
-viDataPadded = zeros(1, iNofFramesNeeded);
-
-% Pad Data with Zeros at Pilot Positions
-while dataCtr <= size(viDlk, 2)
-    if vSlk(slkCtr) == 1
-        viDataPadded(resultCtr) = viDlk(dataCtr);
-        dataCtr = dataCtr + 1;
-    else
-        % already zero
-    end
-    slkCtr = mod(slkCtr, 15*256) + 1; % 15*256 = len of Slk
-    resultCtr = resultCtr + 1;
-end
-
-% Zeropadding at end for full DRM frames
-nRows = ceil(size(viDataPadded, 2) / 256);
-nRowsPad = 15 - mod(nRows, 15);
-nRows = nRows + nRowsPad;
-
-zData = zeros(1, nRows * 256);
-zData(1:size(viDataPadded,2)) = viDataPadded;
-
-% Reshape to Frameshape
-viDataPadded = reshape(zData, 256, [])';
-Slk = viDataPadded;
-
-% Generate Pilots
-Plk = get_drm_pilot_frame(stDRM.mode,stDRM.occupancy);
-
-% Duplicate Pilots to length of Slk
-iNOfFrames = nRows / iNOfSymbols;
-Plk = repmat(Plk,[iNOfFrames 1]);
-
-% Set Pilots in Slk
-Slk(Plk ~= 0) = Plk(Plk ~= 0);
 
 %% OFDM Modulator
 % IFFT
@@ -287,41 +210,18 @@ end
 
 %% Channel Estimation and Equalization
 cInterpolater = 'Wiener';  % 'Spline' or 'Wiener'
-Rlk = channel_estimation_equalization(Rlk, Plk, stOFDM.iNfft, stOFDM.iNg, iModeEst, iOcc, cInterpolater, SwitchDemoSync);
-
-%% Reconstruct Image
-
-% Template for the extraction of the data
-SlkTemp = repmat(get_drm_data_template_frame(stDRM.mode, stDRM.occupancy), size(Rlk,1)/15, 1);
-
-% initialize empty vektor for the data
-viReceivedDlk = [];
-
-% fill the vektor row by row with the data from Rlk
-for iRow = 1:size(Rlk, 1)
-    viReceivedDlk = [viReceivedDlk, Rlk(iRow, SlkTemp(iRow, :) == 1)];
+for iFrame = 1:iNofFramesNeeded
+    icurFrameStart = (iFrame-1)*iNOfSymbolsPerFrame+1;
+    icurFrameEnd = iFrame*iNOfSymbolsPerFrame;
+    Rlk(icurFrameStart:icurFrameEnd,:) = channel_estimation_equalization(Rlk(icurFrameStart:icurFrameEnd,:), Plk, stOFDM.iNfft, stOFDM.iNg, iModeEst, iOcc, cInterpolater, SwitchDemoSync);
 end
 
-% QAM-Demodulation
-DataReceived = qamdemod(viReceivedDlk', M);
+%% Reconstruct Image
+% Call the external function to reconstruct the image
+[reconstructed_image, Received_call_sign] = reconstruct_drm_image(Rlk, stDRM, M, image_size);
 
-% Convert Data to binary
-binaryData4 = de2bi(DataReceived, 4, 'left-msb');
-
-% reshape Data to 8-bit per row
-[m,n]=size(binaryData4);
-binaryData8 = reshape(binaryData4', n*2, m/2)';
-
-% Reconversion to integer
-viReceivedData = bi2de(binaryData8,'left-msb');
-
-% extract Call-Sign
-Received_call_sign = viReceivedData(1:6);
+% Display the call sign
 fprintf('Received call sign: %s\n', char(Received_call_sign));
-viImageReceived = viReceivedData(7:prod(image_size)+6);
-
-% reconstruct image from Received data
-reconstructed_image = reshape(viImageReceived, image_size);
 
 %% Graphical Output
 SlkTemp = repmat(get_drm_data_template_frame(stDRM.mode, stDRM.occupancy), iNofFramesNeeded, 1);
@@ -343,6 +243,7 @@ ylabel('Q')
 title('Transmit Constellation')
 
 subplot(2,3,3)
+image = imread(image_path);
 imshow(uint8(image));
 
 subplot(2,3,4)

@@ -1,57 +1,69 @@
 function [vfcCaptureBuffer] = LoopbackAdalmPluto(vfcTransmitSignal,stAdalmPluto)
-  % Scale the normalized signal to avoid saturation of RF stages
-        x = vfcTransmitSignal(:);
-        powerScaleFactor = 0.8;
-        txWaveform = x.*(1/max(abs(x))*powerScaleFactor);
+    % Normalize input signal to avoid clipping
+    x = vfcTransmitSignal(:);
 
-        % Use oversampling factor from stAdalmPluto if available, otherwise default to 10
-        if isfield(stAdalmPluto, 'oversampling_factor')
-            iOsf = stAdalmPluto.oversampling_factor;
-        else
-            iOsf = 10;
-        end
+    % Normalize input signal power to 1
+    inputPower = sum(abs(x).^2)/length(x);
+    x = x / sqrt(inputPower);
 
-        txWaveform = resample(txWaveform,iOsf,1);
+    % Use a more conservative scale factor to avoid saturation
+    % The actual power will be determined by the TX gain setting
+    powerScaleFactor = 0.7;
+    txWaveform = x.*(1/max(abs(x))*powerScaleFactor);
 
-        % Init Transmission
-        fs = stAdalmPluto.fs*iOsf;     % Symbol rate
-        fc = stAdalmPluto.fc;          % Carrier center Frequency
+    % Use oversampling factor from stAdalmPluto if available, otherwise default to 10
+    if isfield(stAdalmPluto, 'oversampling_factor')
+        iOsf = stAdalmPluto.oversampling_factor;
+    else
+        iOsf = 10;
+    end
 
-        % Ensure TX gain is within valid range for Adalm Pluto (-89.75 to 0 dB)
-        TxGain = min(0, max(-89.75, stAdalmPluto.TxGain));
-        RxGain = min(71, max(-4, stAdalmPluto.RxGain));  % RX gain range: -4 to 71 dB
+    txWaveform = resample(txWaveform,iOsf,1);
 
-        fprintf('Using Adalm Pluto with:\n');
-        fprintf(' - Sample Rate: %.3f MHz\n', fs/1e6);
-        fprintf(' - TX Gain: %.2f dB (range: -89.75 to 0 dB, where 0 dB is max power)\n', TxGain);
-        fprintf(' - RX Gain: %.2f dB (range: -4 to 71 dB)\n', RxGain);
+    % Init Transmission
+    fs = stAdalmPluto.fs*iOsf;     % Symbol rate
+    fc = stAdalmPluto.fc;          % Carrier center Frequency
 
-        % Set up TX Radio
-        tx = sdrtx('Pluto');
+    % Ensure TX gain is within valid range for Adalm Pluto (-89.75 to 0 dB)
+    TxGain = min(0, max(-89.75, stAdalmPluto.TxGain));
+    RxGain = min(71, max(-4, stAdalmPluto.RxGain));  % RX gain range: -4 to 71 dB
 
-        tx.CenterFrequency      = fc;
-        tx.BasebandSampleRate   = fs;
-        tx.Gain                 = TxGain;
+    % Calculate approximate output power based on gain setting
+    approxPowerDbm = stAdalmPluto.max_power_dbm + TxGain;  % Reduce by gain amount (negative dB)
 
-        % Set up RX Radio
-        rx = sdrrx('Pluto');
-        rx.BasebandSampleRate   = tx.BasebandSampleRate;
-        rx.CenterFrequency      = tx.CenterFrequency;
-        rx.GainSource           = 'Manual';
-        rx.Gain                 = RxGain;
-        rx.OutputDataType       = 'double';
+    fprintf('Using Adalm Pluto with:\n');
+    fprintf(' - Sample Rate: %.3f MHz\n', fs/1e6);
+    fprintf(' - TX Gain: %.2f dB (range: -89.75 to 0 dB, where 0 dB is max power)\n', TxGain);
+    fprintf(' - Approximate TX Power: %.2f dBm\n', approxPowerDbm);
+    fprintf(' - RX Gain: %.2f dB (range: -4 to 71 dB)\n', RxGain);
 
-        % Pass data through radio
-        fprintf('\nStarting transmission.\n')
-        transmitRepeat(tx,txWaveform);
+    % Set up TX Radio
+    tx = sdrtx('Pluto');
 
-        captureLength = 2*length(x)*iOsf;
-        fprintf('\nStarting capturing.\n')
+    tx.CenterFrequency      = fc;
+    tx.BasebandSampleRate   = fs;
+    tx.Gain                 = TxGain;
 
-        vfcCaptureBuffer = capture(rx, captureLength, 'Samples');
+    % Set up RX Radio
+    rx = sdrrx('Pluto');
+    rx.BasebandSampleRate   = tx.BasebandSampleRate;
+    rx.CenterFrequency      = tx.CenterFrequency;
+    rx.GainSource           = 'Manual';
+    rx.Gain                 = RxGain;
+    rx.OutputDataType       = 'double';
+
+    % Pass data through radio
+    fprintf('\nStarting transmission.\n')
+    transmitRepeat(tx,txWaveform);
+
+    captureLength = 2*length(x)*iOsf;
+    fprintf('\nStarting capturing.\n')
+
+    vfcCaptureBuffer = capture(rx, captureLength, 'Samples');
 
 
-        vfcCaptureBuffer = resample(vfcCaptureBuffer,1,iOsf);
+    vfcCaptureBuffer = resample(vfcCaptureBuffer,1,iOsf);
 
-        release(tx);
-        release(rx);
+    release(tx);
+    release(rx);
+end

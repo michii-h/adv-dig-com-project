@@ -10,7 +10,7 @@
 % *************************************************************************
 % Initialisierung SDR
 % ************************************************************************
-function stAdalmPluto = initSDR(fs, fc, TxGain, RxGain)
+function stAdalmPluto = initSDR(stSat)
 
 % Init Adalm Pluto
 % stAdalmPluto.fs = 12e3;     % Symbol rate
@@ -18,7 +18,11 @@ function stAdalmPluto = initSDR(fs, fc, TxGain, RxGain)
 % stAdalmPluto.TxGain = -10; % Gain, specified as a scalar from -89.75 to 0 dB with a resolution of 0.25 dB
 % stAdalmPluto.RxGain = 50;  % Radio receiver gain in dB, specified as a scalar from -4 to 71
 
-stAdalmPluto.fs = fs;     % Symbol rate
-stAdalmPluto.fc = fc; % Carrier center Frequency
-stAdalmPluto.TxGain = TxGain; % Gain, specified as a scalar from -89.75 to 0 dB with a resolution of 0.25 dB
-stAdalmPluto.RxGain = RxGain;  % Radio receiver gain in dB, specified as a scalar from -4 to 71
+stAdalmPluto.fs = stSat.sampleRate;     % Symbol rate
+stAdalmPluto.fc = stSat.fc;             % Carrier center Frequency
+stAdalmPluto.TxGain = stSat.adalm_txGain; % Gain, specified as a scalar from -89.75 to 0 dB with a resolution of 0.25 dB
+stAdalmPluto.RxGain = stSat.adalm_rxGain;  % Radio receiver gain in dB, specified as a scalar from -4 to 71
+
+stAdalmPluto.max_power_dbm  = adalm_max_power_dbm;
+
+end

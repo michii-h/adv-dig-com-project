@@ -1,8 +1,7 @@
 function vfcReceiveSignal = channel_sim(vfcTransmitSignal,stChannel)
-    % Simulate iSampleShift = 17 between Tx and Rx
-    iSampleShift = 15;
+    % Simulate iSampleShift = 15 between Tx and Rx
+    iSampleShift = 0;
     vfcTransmitSignal = circshift(vfcTransmitSignal,[iSampleShift 0]);
-
 
     % Frequency- and Phase-Offset
     vfcPhaser = exp(1j*stChannel.fFreqOffset*[0:length(vfcTransmitSignal)-1]+1j*stChannel.fPhaseOffset);
