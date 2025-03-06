@@ -23,7 +23,7 @@ function vfcReceiveSignal = simulate_qo100_channel(vfcTransmitSignal, stSat)
             10*log10(stSat.expected_output_power_w)+30, stSat.expected_output_power_w);
 
     % Calculate free space path loss and apply it to the signal
-    lambda = stSat.c / stSat.downlinkFreq;
+    lambda = stSat.c / stSat.uplinkFreq;
     pathLoss = (4 * pi * stSat.slantRange / lambda)^2;
     pathLossDB = 10*log10(pathLoss);
     vfcSignal = vfcTransmitSignal / sqrt(pathLoss);

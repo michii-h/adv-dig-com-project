@@ -33,7 +33,7 @@ function stSat = init_qo100_params()
     stSat.adalm_minTxGain = -89.75;    % Minimum TX gain for Adalm Pluto
     stSat.adalm_maxTxGain = 0;         % Maximum TX gain for Adalm Pluto (0 is maximum power)
 
-    stSat.adalm_max_power_dbm = 50;    % Typical max power for Adalm Pluto
+    stSat.adalm_max_power_dbm = 100;    % Typical max power for Adalm Pluto
 
     % Link budget parameters
     stSat.eirp = 39;                   % Satellite EIRP (dBW)
@@ -101,10 +101,10 @@ function [txPower, margin, snr] = calculateLinkBudget(stSat)
     cableLength = 12;             % meters of cable
     cableLoss = 0.3;              % dB/m for Ecoflex 7mm
 
-    % Antenna gain calculation (with efficiency included)
+    % Antenna gain calculation
     antennaGain = 10*log10(((pi*stSat.antennaDiam)/lambda)^2 * antennaEfficiency);
 
-    % Free space path loss (using actual slant range)
+    % Free space path loss
     fsl = 20*log10(4*pi*stSat.slantRange/lambda);
 
     % Cable loss calculation
