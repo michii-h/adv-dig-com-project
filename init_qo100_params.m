@@ -27,9 +27,11 @@ function stSat = init_qo100_params()
 
     % SDR parameters
     stSat.sampleRate = 1e6;            % 1 MSPS for Adalm Pluto
-    stSat.adalm_txGain = 0;            % Initial TX gain (dB), adjust based on link budget
+    stSat.oversampling_factor = 10;    % The actual sample rate will be multiplied by this in the SDR
     stSat.adalm_rxGain = 60;           % Initial RX gain (dB)
-    stSat.adalm_maxTxGain = 89;        % Maximum TX gain for Adalm Pluto
+    % For Adalm Pluto, TX gain range is -89.75 to 0 dB (0 is maximum power)
+    stSat.adalm_minTxGain = -89.75;    % Minimum TX gain for Adalm Pluto
+    stSat.adalm_maxTxGain = 0;         % Maximum TX gain for Adalm Pluto (0 is maximum power)
     stSat.adalm_bpsk_symbolRate = 2400; % Common symbol rate for NB digital modes
 
     % Link budget parameters
@@ -43,15 +45,21 @@ function stSat = init_qo100_params()
     [stSat.txPower, stSat.linkMargin, stSat.expectedSNR] = calculateLinkBudget(stSat);
 
     % Adjust Adalm Pluto TX gain based on calculated power
-    % Higher gain means more power, so we use positive correlation
+    % For Adalm Pluto, 0dB = max power, and negative values reduce power
     powerInDBm = 10*log10(stSat.txPower) + 30;  % Convert W to dBm
-    stSat.adalm_txGain = min(stSat.adalm_maxTxGain, powerInDBm);
+
+    % Normalize to Adalm Pluto's scale (-89.75 to 0 dB)
+    % Higher powerInDBm means we want more power (closer to 0)
+    normalizedTxGain = -max(0, 30 - powerInDBm);  % Simple scaling approach
+    stSat.adalm_txGain = max(stSat.adalm_minTxGain, min(stSat.adalm_maxTxGain, normalizedTxGain));
 
     % Print results
     fprintf('Required transmit power: %.2f dBW (%.2f W)\n', 10*log10(stSat.txPower), stSat.txPower);
+    fprintf('Required transmit power: %.2f dBm\n', powerInDBm);
     fprintf('Link margin:  %.2f dB\n', stSat.linkMargin);
     fprintf('Expected SNR: %.2f dB\n', stSat.expectedSNR);
-    fprintf('Recommended Adalm Pluto TX gain: %.2f dB\n', stSat.adalm_txGain);
+    fprintf('Adalm Pluto TX gain setting: %.2f dB\n', stSat.adalm_txGain);
+    fprintf('Note: Adalm Pluto TX gain range is -89.75 to 0 dB (0 is maximum power)\n');
 
     % Add warning if link margin is negative
     if stSat.linkMargin < 0

@@ -119,7 +119,7 @@ stSat = init_qo100_params();
 
 %% Channel
 % Switch Channels
-iSwitchChannel = 1;
+iSwitchChannel = 2;
 
 switch iSwitchChannel
 
@@ -138,7 +138,11 @@ switch iSwitchChannel
 
     case 3 % Use Adalm Pluto
         fprintf('Using Adalm Pluto...\n');
-        stAdalmPluto = initSDR(stSat.sampleRate, stSat.fc, stSat.TxGain, stSat.RxGain);
+        stAdalmPluto = initSDR(stSat.sampleRate, stSat.fc, stSat.adalm_txGain, stSat.adalm_rxGain);
+        % Pass oversampling factor if needed
+        if isfield(stSat, 'oversampling_factor')
+            stAdalmPluto.oversampling_factor = stSat.oversampling_factor;
+        end
         vfcReceiveSignal = LoopbackAdalmPluto(vfcTransmitSignal, stAdalmPluto);
 
 end
@@ -186,22 +190,23 @@ vIndexGI = [0:iNg-1].';
 R = zeros(1,iNs);
 
 for l = 0:iNOfSymbols-2
-for k = 1:iNs
-    % Calculate Correlation
-    R(k) = R(k) + vfcReceiveSignal(k+vIndexGI+l*iNs)'*vfcReceiveSignal(k+vIndexGI+iNfft+l*iNs);
-end
+    for k = 1:iNs
+        R(k) = R(k) + ...
+            sum(conj(vfcReceiveSignal(k+vIndexGI+l*iNs)).*vfcReceiveSignal(k+vIndexGI+iNfft+l*iNs));
+    end
 end
 
 [~ ,iStartSample] = max(abs(R));
 dOmegaEst = angle(R(iStartSample))/iNfft;
 
 % Compensate Frequency Offset
-vfcPhaser = exp(-j*dOmegaEst*[0:length(vfcReceiveSignal)-1]);
+vfcPhaser = exp(-1j*dOmegaEst*[0:length(vfcReceiveSignal)-1]);
 vfcPhaser = vfcPhaser(:);
-vfcReceiveSignal = vfcReceiveSignal .* vfcPhaser;
 
 % Adjust to Start Sample
 vfcReceiveSignal = vfcReceiveSignal(iStartSample:end);
+iNOfSymbols = floor(length(vfcReceiveSignal)/iNs);
+vfcReceiveSignal = vfcReceiveSignal(1:iNOfSymbols*iNs);
 
 if SwitchDemoSync
     figure(101)
@@ -217,10 +222,6 @@ if SwitchDemoSync
 end
 
 %% OFDM Demodulator
-% Ensure vfcReceiveSignal is divisible by iNs
-iNOfSymbols = floor(length(vfcReceiveSignal)/iNs);
-vfcReceiveSignal = vfcReceiveSignal(1:iNOfSymbols*iNs);
-
 % Serial to Parallel Conversion
 RlkTemp = reshape(vfcReceiveSignal,stOFDM.iNs,[]).';
 
@@ -265,13 +266,21 @@ for iFrame = 1:length(viFrameStart)
     stRlk{iFrame} = Rlk(viFrameStart(iFrame)+viFrameSymbols,:);
 end
 
-% Run first Frame
+% Run for full image
 Rlk = vertcat(stRlk{1:end});
 iNOfSymbols = iNofFramesNeeded * iNOfSymbolsPerFrame;
+Rlk = Rlk(1:iNOfSymbols, :);
 
 %% Fine Synchronization
-% Use the fine_sync function to perform linear phase correction
-Rlk = fine_sync(Rlk, Plk, iNfft, iNOfSymbolsPerFrame, SwitchDemoSync);
+Plk = get_drm_pilot_frame(iModeEst,iOcc);
+% Plk = repmat(Plk,[iNofFramesNeeded 1]);
+
+% Call the fine synchronization function for each frame to correct phase errors
+for iFrame = 1:iNOfFramesNeeded
+    icurFrameStart = (iFrame-1)*iNOfSymbolsPerFrame+1;
+    icurFrameEnd = iFrame*iNOfSymbolsPerFrame;
+    Rlk(icurFrameStart:icurFrameEnd,:) = fine_sync(Rlk(icurFrameStart:icurFrameEnd,:), Plk, iNfft, SwitchDemoSync);
+end
 
 %% Channel Estimation and Equalization
 cInterpolater = 'Wiener';  % 'Spline' or 'Wiener'

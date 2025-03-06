@@ -1,22 +1,24 @@
 function vfcReceiveSignal = channel_sim(vfcTransmitSignal,stChannel)
-    % Apply sample shift if needed
-    iSampleShift = 0;
+    % Simulate iSampleShift = 17 between Tx and Rx
+    iSampleShift = 15;
     vfcTransmitSignal = circshift(vfcTransmitSignal,[iSampleShift 0]);
 
-    % Frequency offset (apply continuous rotation over time)
-    vfcPhaser = exp(1j * 2 * pi * stChannel.fFreqOffset * [0:length(vfcTransmitSignal)-1]' / length(vfcTransmitSignal));
-    vfcReceiveSignal = vfcTransmitSignal .* vfcPhaser;
 
-    % Phase offset (constant phase shift)
-    vfcReceiveSignal = vfcReceiveSignal * exp(1j * stChannel.fPhaseOffset);
+    % Frequency- and Phase-Offset
+    vfcPhaser = exp(1j*stChannel.fFreqOffset*[0:length(vfcTransmitSignal)-1]+1j*stChannel.fPhaseOffset);
+    vfcPhaser = vfcPhaser(:);
+    vfcReceiveSignal = vfcTransmitSignal.*vfcPhaser;
 
-    % Sample offset (fractional timing error)
+    % sample offset
     vfcFFT = fft(vfcReceiveSignal);
-    vOmega = 2*pi*[0:length(vfcFFT)-1].'/length(vfcFFT);
-    vfcReceiveSignal = ifft(vfcFFT .* fftshift(exp(1j * vOmega * stChannel.fSampleOffset)));
+    vOmega = 2*pi*( 0:length(vfcFFT)-1 ).'/length(vfcFFT);
+    vfcReceiveSignal = ifft(vfcFFT.*fftshift(exp(1j*vOmega*stChannel.fSampleOffset)));
 
     % AWGN Channel
-    vfcReceiveSignal = awgn(vfcReceiveSignal, stChannel.fSNRdB);
+    vfcReceiveSignal = awgn(vfcReceiveSignal,stChannel.fSNRdB);
+
+    %Multipath channel
+    vfcReceiveSignal = conv(vfcReceiveSignal,stChannel.vfImpulseResponse);
 
     % Multipath channel
     if length(stChannel.vfImpulseResponse) > 1
