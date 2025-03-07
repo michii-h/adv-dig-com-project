@@ -3,11 +3,17 @@ start_up;
 
 SwitchDemoSync = false; % additional plots for Demo
 
+%% Transmission Parameters Initialization
+% Link budget calculation etc
+stSat = init_qo100_params();
+
+%% DRM Bandwidth Calculation
+% Calculate the bandwidth for the DRM modes
+calculate_drm_bandwidth(stSat.fs);
+
 %% DRM Initialization
-% stDRM Mode
 stDRM.mode = 2; % Corresponds to Mode B
-% Spectrum Occupancy
-stDRM.occupancy = 3;
+stDRM.occupancy = 1;
 
 %% stOFDM Initialization
 % FFT length
@@ -19,7 +25,7 @@ stOFDM.iNs = stOFDM.iNfft + stOFDM.iNg;
 
 %% Generate DRM Frame
 % Call the function to generate the DRM frame
-image_path = 'image.png';
+image_path = 'image_small.png';
 [Slk, M, image_size, iNofFramesNeeded, iNOfFrames] = generate_drm_frame(stDRM, image_path, 'DL0FHR');
 
 % Number of Symbols per frame
@@ -37,12 +43,9 @@ SlkTemp = SlkTemp.';
 vfcTransmitSignal = SlkTemp(:);
 
 % Repeat iG Frames
-iG = 2;
+iG = 1;
 vfcTransmitSignal = repmat(vfcTransmitSignal,iG,1);
 
-%% Initialize Satellite Communication specific parameters for QO-100 - Adalm Pluto
-% Link budget calculation etc
-stSat = init_qo100_params();
 
 %% Channel
 % Switch Channels
@@ -65,23 +68,18 @@ switch iSwitchChannel
 
     case 3 % Use Adalm Pluto
         fprintf('Using Adalm Pluto...\n');
-        stAdalmPluto = initSDR(stSat);
-        % Pass oversampling factor if needed
-        if isfield(stSat, 'oversampling_factor')
-            stAdalmPluto.oversampling_factor = stSat.oversampling_factor;
-        end
-        
-        vfcReceiveSignal = LoopbackAdalmPluto(vfcTransmitSignal, stAdalmPluto, 1);
+        % SDR parameters are now integrated in stSat
+        vfcReceiveSignal = LoopbackAdalmPluto(vfcTransmitSignal, stSat, 1);
 
         % iFrameLength = stOFDM.iNs*iNOfSymbols*10;
         % iNOfTransmits = size(vfcTransmitSignal) / iFrameLength;
-        % 
+        %
         % vfcReceiveSignal = zeros(size(vfcTransmitSignal));
-        % 
+        %
         % for i = 1:iNOfTransmits
         %     startIdx = ((i-1)*iFrameLength)+1;
         %     endIdx = startIdx + iFrameLength;
-        %     buf = LoopbackAdalmPluto(vfcTransmitSignal(startIdx:endIdx), stAdalmPluto, i);
+        %     buf = LoopbackAdalmPluto(vfcTransmitSignal(startIdx:endIdx), stSat, i);
         %     vfcReceiveSignal(startIdx:endIdx) = buf(1:iFrameLength+1);
         % end
 
@@ -107,12 +105,12 @@ mX(4,:) = circshift(vfcReceiveSignal,[112 0])';
 
 % Calculate Robustnes Mode
 [~, iModeEst] = max(abs(mX*vfcReceiveSignal));
-iOcc = 3;
+iOcc = stDRM.occupancy;
 % Determine OFDM Parameters for estimated Robustnes Mode
 % FFT length
-iNfft = get_drm_n_useful(iModeEst,3); % Occupancy fixed at 3
+iNfft = get_drm_n_useful(iModeEst,iOcc);
 % Guard Intervall Length
-iNg = get_drm_n_guard(iModeEst,3);% Occupancy fixed at 3
+iNg = get_drm_n_guard(iModeEst,iOcc);
 % Complete Symbol length
 iNs = iNfft + iNg;
 % Number of Symols per DRM Frame
