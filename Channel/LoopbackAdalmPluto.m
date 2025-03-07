@@ -3,12 +3,12 @@ function [vfcCaptureBuffer] = LoopbackAdalmPluto(vfcTransmitSignal,stAdalmPluto,
     x = vfcTransmitSignal(:);
 
     % Normalize input signal power to 1
-    inputPower = sum(abs(x).^2)/length(x);
-    x = x / sqrt(inputPower);
+    % inputPower = sum(abs(x).^2)/length(x);
+    % x = x / sqrt(inputPower);
 
     % Use a more conservative scale factor to avoid saturation
     % The actual power will be determined by the TX gain setting
-    powerScaleFactor = 0.7;
+    powerScaleFactor = 0.8;
     txWaveform = x.*(1/max(abs(x))*powerScaleFactor);
 
     % Use oversampling factor from stAdalmPluto if available, otherwise default to 10
@@ -33,6 +33,7 @@ function [vfcCaptureBuffer] = LoopbackAdalmPluto(vfcTransmitSignal,stAdalmPluto,
 
     if i==1
         fprintf('Using Adalm Pluto with:\n');
+        fprintf(' - Carrier: %.3f Hz\n', fc);
         fprintf(' - Sample Rate: %.3f MHz\n', fs/1e6);
         fprintf(' - TX Gain: %.2f dB (range: -89.75 to 0 dB, where 0 dB is max power)\n', TxGain);
         fprintf(' - Approximate TX Power: %.2f dBm\n', approxPowerDbm);
