@@ -14,8 +14,11 @@ function [reconstructed_image, received_call_sign] = reconstruct_drm_image(Rlk, 
 % Example:
 %   [image, call_sign] = reconstruct_drm_image(Rlk, stDRM, 16, [480 640 3]);
 
+    % Number of Symbols per frame
+    iNOfSymbols = get_drm_symbols_per_frame(stDRM.mode);
+
     % Template for the extraction of the data
-    dataTemplate = repmat(get_drm_data_template_frame(stDRM.mode, stDRM.occupancy), size(Rlk,1)/15, 1);
+    dataTemplate = repmat(get_drm_data_template_frame(stDRM.mode, stDRM.occupancy), size(Rlk,1)/iNOfSymbols, 1);
 
     % Initialize empty vector for the data
     receivedSymbols = [];
@@ -33,7 +36,8 @@ function [reconstructed_image, received_call_sign] = reconstruct_drm_image(Rlk, 
 
     % Reshape data to 8-bit per row
     [m, n] = size(binaryData4);
-    binaryData8 = reshape(binaryData4', n*2, m/2)';
+    % binaryData8 = reshape(binaryData4', n*2, m/2)';
+    binaryData8 = reshape(binaryData4', n*2, [])';
 
     % Reconversion to integer
     receivedData = bi2de(binaryData8, 'left-msb');

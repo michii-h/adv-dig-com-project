@@ -10,10 +10,12 @@ stSat = init_qo100_params();
 %% DRM Bandwidth Calculation
 % Calculate the bandwidth for the DRM modes
 calculate_drm_bandwidth(stSat.fs);
+% This function will show which combinations meet the 2.7kHz constraint
+% Take note of the valid combinations from the output table
 
 %% DRM Initialization
-stDRM.mode = 2; % Corresponds to Mode B
-stDRM.occupancy = 1;
+stDRM.mode = 3;      % Corresponds to Mode B
+stDRM.occupancy = 3;
 
 %% stOFDM Initialization
 % FFT length
@@ -26,10 +28,7 @@ stOFDM.iNs = stOFDM.iNfft + stOFDM.iNg;
 %% Generate DRM Frame
 % Call the function to generate the DRM frame
 image_path = 'image_small.png';
-[Slk, M, image_size, iNofFramesNeeded, iNOfFrames] = generate_drm_frame(stDRM, image_path, 'DL0FHR');
-
-% Number of Symbols per frame
-iNOfSymbols = get_drm_symbols_per_frame(stDRM.mode);
+[Slk, M, image_size, iNofFramesNeeded, iNOfFrames] = generate_drm_frames(stDRM, stOFDM, image_path, 'DL0FHR');
 
 %% OFDM Modulator
 % IFFT
@@ -42,14 +41,9 @@ SlkTemp = [SlkTemp(:,end-stOFDM.iNg+1:end) SlkTemp];
 SlkTemp = SlkTemp.';
 vfcTransmitSignal = SlkTemp(:);
 
-% Repeat iG Frames
-iG = 1;
-vfcTransmitSignal = repmat(vfcTransmitSignal,iG,1);
-
-
 %% Channel
 % Switch Channels
-iSwitchChannel = 3;
+iSwitchChannel = 2;
 
 switch iSwitchChannel
 
@@ -60,11 +54,20 @@ switch iSwitchChannel
     case 1 % simulated channel
         fprintf('Using simulated channel...\n');
 
+        % Repeat iG Frames
+        iG = 2;
+        vfcTransmitSignal = repmat(vfcTransmitSignal,iG,1);
+
         stChannel = initChannel();
         vfcReceiveSignal = channel_sim(vfcTransmitSignal,stChannel);
 
     case 2 % Simulate Satellite Communication for Q0-100
-       vfcReceiveSignal = simulate_qo100_channel(vfcTransmitSignal, stSat);
+
+        % Repeat iG Frames
+        iG = 2;
+        vfcTransmitSignal = repmat(vfcTransmitSignal,iG,1);
+
+        vfcReceiveSignal = simulate_qo100_channel(vfcTransmitSignal, stSat);
 
     case 3 % Use Adalm Pluto
         fprintf('Using Adalm Pluto...\n');
@@ -120,44 +123,7 @@ strModes = ['A','B','C','D'];
 fprintf('Robustness Mode: %s\n', strModes(iModeEst));
 
 %% Synchronization
-% Number of Symbols in CaptureBuffer
-iNOfSymbols = floor(length(vfcReceiveSignal)/iNs);
-
-% Timing Recovery with Cyclic Prefix
-vIndexGI = [0:iNg-1].';
-R = zeros(1,iNs);
-
-for l = 0:iNOfSymbols-2
-    for k = 1:iNs
-        R(k) = R(k) + ...
-            sum(conj(vfcReceiveSignal(k+vIndexGI+l*iNs)).*vfcReceiveSignal(k+vIndexGI+iNfft+l*iNs));
-    end
-end
-
-[~ ,iStartSample] = max(abs(R));
-dOmegaEst = angle(R(iStartSample))/iNfft;
-
-% Compensate Frequency Offset
-vfcPhaser = exp(-1j*dOmegaEst*[0:length(vfcReceiveSignal)-1]);
-vfcPhaser = vfcPhaser(:);
-
-% Adjust to Start Sample
-vfcReceiveSignal = vfcReceiveSignal(iStartSample:end);
-iNOfSymbols = floor(length(vfcReceiveSignal)/iNs);
-vfcReceiveSignal = vfcReceiveSignal(1:iNOfSymbols*iNs);
-
-if SwitchDemoSync
-    figure(101)
-    plot([0:iNs-1],abs(R))
-    xlabel('k')
-    ylabel('R_{xy}(k)')
-    hold on
-    plot(iStartSample, abs(R(iStartSample)),'ro')
-    hold off
-
-    % figure;
-    % plot(abs(sum(reshape(filter(ones(1,iNg),1,vfcReceiveSignal.*conj(circshift(vfcReceiveSignal,[iNfft 0]))),iNs,iNOfSymbols),2)))
-end
+vfcReceiveSignal = sync(vfcReceiveSignal, iNs, iNg, iNfft, SwitchDemoSync);
 
 %% OFDM Demodulator
 % Serial to Parallel Conversion
@@ -171,7 +137,7 @@ Rlk = fftshift(fft(RlkTemp,stOFDM.iNfft,2),2);
 
 %% Frame Detection
 % Generate Pilots
-Plk = get_drm_pilot_frame(iModeEst,3);
+Plk = get_drm_pilot_frame(iModeEst,iOcc);
 % Calculate Correlation Metrik
 Mlk = xcorr2(Rlk,Plk);
 Mlk(1:iNOfSymbolsPerFrame-1,:) = [];
@@ -206,7 +172,7 @@ end
 
 % Run first Frame
 Rlk = vertcat(stRlk{1:iNofFramesNeeded});
-iNOfSymbols = iNofFramesNeeded * iNOfSymbolsPerFrame;
+iNOfSymbolsTotal = iNofFramesNeeded * iNOfSymbolsPerFrame;
 
 %% Fine Synchronization
 Plk = get_drm_pilot_frame(iModeEst,iOcc);
@@ -281,7 +247,7 @@ if SwitchDemoSync
     figure(2)
     subplot(3,2,[1 3 5])
     mfcPhase = angle(conj(Slk).*Rlk);
-    imagesc((1:stOFDM.iNfft)-get_drm_dc_position(stDRM.mode,stDRM.occupancy),0:iNOfSymbols-1,mfcPhase)
+    imagesc((1:stOFDM.iNfft)-get_drm_dc_position(stDRM.mode,stDRM.occupancy),0:iNOfSymbolsTotal-1,mfcPhase)
     xlabel('Subchannel k')
     ylabel('Symbol l')
     title('Phase Difference')
@@ -289,7 +255,7 @@ if SwitchDemoSync
     fpilot_position = get_drm_fpilot_position(stDRM.mode)+get_drm_dc_position(stDRM.mode,stDRM.occupancy);
     dc_position = get_drm_dc_position(stDRM.mode,stDRM.occupancy);
     subplot(3,2,2)
-    plot(0:iNOfSymbols-1,mfcPhase(:,fpilot_position(1)))
+    plot(0:iNOfSymbolsTotal-1,mfcPhase(:,fpilot_position(1)))
     xlabel('Symbol l')
     ylabel('Phase Difference in rad')
     title(['1st fPilot / Subchannel:  ' num2str(fpilot_position(1)-dc_position)])
@@ -297,7 +263,7 @@ if SwitchDemoSync
 
 
     subplot(3,2,4)
-    plot(0:iNOfSymbols-1,mfcPhase(:,fpilot_position(2)))
+    plot(0:iNOfSymbolsTotal-1,mfcPhase(:,fpilot_position(2)))
     xlabel('Symbol l')
     ylabel('Phase Difference in rad')
     title(['2nd fPilot / Subchannel:  ' num2str(fpilot_position(2)-dc_position)])
@@ -305,7 +271,7 @@ if SwitchDemoSync
 
 
     subplot(3,2,6)
-    plot(0:iNOfSymbols-1,mfcPhase(:,fpilot_position(3)))
+    plot(0:iNOfSymbolsTotal-1,mfcPhase(:,fpilot_position(3)))
     xlabel('Symbol l')
     ylabel('Phase Difference in rad')
     title(['3rd fPilot / Subchannel:  ' num2str(fpilot_position(3)-dc_position)])

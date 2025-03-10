@@ -1,9 +1,10 @@
-function [Slk, M, image_size, iNofFramesNeeded, iNOfFrames] = generate_drm_frame(stDRM, image_path, call_sign_str)
+function [Slk, M, image_size, iNofFramesNeeded, iNOfFrames] = generate_drm_frames(stDRM, stOFDM, image_path, call_sign_str)
 % GENERATE_DRM_FRAME Generates a DRM frame with embedded image and call sign
-%   [Slk, M, image_size, iNofFramesNeeded, iNOfFrames] = generate_drm_frame(stDRM, image_path, call_sign_str)
+%   [Slk, M, image_size, iNofFramesNeeded, iNOfFrames] = generate_drm_frames(stDRM, stOFDM, image_path, call_sign_str)
 %
 %   Inputs:
 %     stDRM - Structure containing DRM parameters (mode, occupancy)
+%     stOFDM - Structure containing OFDM parameters (fft length, etc)
 %     image_path - Path to the image file to be embedded
 %     call_sign_str - String containing the call sign
 %
@@ -72,20 +73,20 @@ while dataCtr <= size(viDlk, 2)
     else
         % already zero
     end
-    slkCtr = mod(slkCtr, 15*256) + 1; % 15*256 = len of Slk
+    slkCtr = mod(slkCtr, iNOfSymbols*stOFDM.iNfft) + 1; % 15*256 = len of Slk
     resultCtr = resultCtr + 1;
 end
 
 % Zeropadding at end for full DRM frames
-nRows = ceil(size(viDataPadded, 2) / 256);
-nRowsPad = 15 - mod(nRows, 15);
+nRows = ceil(size(viDataPadded, 2) / stOFDM.iNfft);
+nRowsPad = iNOfSymbols - mod(nRows, iNOfSymbols);
 nRows = nRows + nRowsPad;
 
-zData = zeros(1, nRows * 256);
+zData = zeros(1, nRows * stOFDM.iNfft);
 zData(1:size(viDataPadded,2)) = viDataPadded;
 
 % Reshape to Frameshape
-viDataPadded = reshape(zData, 256, [])';
+viDataPadded = reshape(zData, stOFDM.iNfft, [])';
 Slk = viDataPadded;
 
 % Generate Pilots
