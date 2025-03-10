@@ -14,7 +14,7 @@ calculate_drm_bandwidth(stSat.fs);
 % Take note of the valid combinations from the output table
 
 %% DRM Initialization
-stDRM.mode = 3;      % Corresponds to Mode B
+stDRM.mode = 4;      % Corresponds to Mode B
 stDRM.occupancy = 3;
 
 %% stOFDM Initialization
@@ -43,7 +43,7 @@ vfcTransmitSignal = SlkTemp(:);
 
 %% Channel
 % Switch Channels
-iSwitchChannel = 2;
+iSwitchChannel = 3;
 
 switch iSwitchChannel
 

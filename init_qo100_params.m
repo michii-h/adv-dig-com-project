@@ -33,7 +33,7 @@ function stSat = init_qo100_params()
     stSat.fc = stSat.uplinkFreq;      % Center frequency (Hz)
     % stSat.fcTx = stSat.uplinkFreq;    % TX center frequency (Hz)
     % stSat.fcRx = stSat.downlinkFreq;  % RX center frequency (Hz)
-    stSat.oversampling_factor = 50;  % Oversampling factor
+    stSat.oversampling_factor = 25;  % Oversampling factor
     stSat.bandwidth = 2.7e3;          % Bandwidth limit (Hz)
 
     % Adalm Pluto specific parameters
