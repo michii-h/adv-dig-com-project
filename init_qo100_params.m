@@ -40,7 +40,7 @@ function stSat = init_qo100_params()
     stSat.rxGain = 50;                % RX gain (dB)
     stSat.minTxGain = -89.75;         % Minimum TX gain for Adalm Pluto
     stSat.maxTxGain = 0;              % Maximum TX gain (0 is maximum power)
-    stSat.max_power_dbm = 7 + 50;     % Maximum power in dBm
+    stSat.max_power_dbm = 7 + 40;     % Maximum power in dBm
 
     % Link budget parameters
     stSat.eirp = 39;                  % Satellite EIRP (dBW)

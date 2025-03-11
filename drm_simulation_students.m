@@ -14,7 +14,7 @@ calculate_drm_bandwidth(stSat.fs);
 % Take note of the valid combinations from the output table
 
 %% DRM Initialization
-stDRM.mode = 4;      % Corresponds to Mode B
+stDRM.mode = 4;      % Corresponds to Mode D
 stDRM.occupancy = 3;
 
 %% stOFDM Initialization
@@ -27,7 +27,8 @@ stOFDM.iNs = stOFDM.iNfft + stOFDM.iNg;
 
 %% Generate DRM Frame
 % Call the function to generate the DRM frame
-image_path = 'image_small.png';
+image_path = 'th-rosenheim-logo-colored.png';
+call_sign = 'DL0FHR';
 [Slk, M, image_size, iNofFramesNeeded, iNOfFrames] = generate_drm_frames(stDRM, stOFDM, image_path, 'DL0FHR');
 
 %% OFDM Modulator
@@ -49,6 +50,11 @@ switch iSwitchChannel
 
     case 0 % ideal channel
         fprintf('Using ideal channel...\n');
+
+         % Repeat iG Frames
+        iG = 2;
+        vfcTransmitSignal = repmat(vfcTransmitSignal,iG,1);
+
         vfcReceiveSignal = vfcTransmitSignal;
 
     case 1 % simulated channel
@@ -195,7 +201,7 @@ end
 
 %% Reconstruct Image
 % Call the external function to reconstruct the image
-[reconstructed_image, Received_call_sign] = reconstruct_drm_image(Rlk, stDRM, M, image_size);
+[reconstructed_image, Received_call_sign] = reconstruct_drm_image(Rlk, stDRM, M, image_size, call_sign);
 
 % Display the call sign
 fprintf('Received call sign: %s\n', char(Received_call_sign));

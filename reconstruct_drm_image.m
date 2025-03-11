@@ -1,4 +1,4 @@
-function [reconstructed_image, received_call_sign] = reconstruct_drm_image(Rlk, stDRM, M, image_size)
+function [reconstructed_image, received_call_sign] = reconstruct_drm_image(Rlk, stDRM, M, image_size, expected_callsign)
 % RECONSTRUCT_DRM_IMAGE Extracts and reconstructs image data from received DRM frame
 %
 % Inputs:
@@ -41,6 +41,16 @@ function [reconstructed_image, received_call_sign] = reconstruct_drm_image(Rlk, 
 
     % Reconversion to integer
     receivedData = bi2de(binaryData8, 'left-msb');
+
+    % Find call sign
+    start_index_callsign = strfind(receivedData', uint8(double(expected_callsign)));
+
+    % Reshape Data
+    if size(start_index_callsign) ~= 0
+    receivedData = [receivedData(start_index_callsign:end); receivedData(1:start_index_callsign)];
+    else
+        warning('Callsign not found');
+    end
 
     % Extract call sign (first 6 bytes)
     received_call_sign = receivedData(1:6);

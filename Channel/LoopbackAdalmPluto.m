@@ -3,7 +3,7 @@ function [vfcCaptureBuffer] = LoopbackAdalmPluto(vfcTransmitSignal, stSat, i)
     x = vfcTransmitSignal(:);
 
     % Use a conservative scale factor to avoid saturation
-    powerScaleFactor = 0.8;
+    powerScaleFactor = 0.9;
     txWaveform = x.*(1/max(abs(x))*powerScaleFactor);
 
     bandwidth = stSat.bandwidth;
