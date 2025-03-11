@@ -3,10 +3,18 @@ start_up;
 
 SwitchDemoSync = false; % additional plots for Demo
 
+%% Transmission Parameters Initialization
+% Link budget calculation etc
+stSat = init_qo100_params();
+
+%% DRM Bandwidth Calculation
+% Calculate the bandwidth for the DRM modes
+calculate_drm_bandwidth(stSat.fs);
+% This function will show which combinations meet the 2.7kHz constraint
+% Take note of the valid combinations from the output table
+
 %% DRM Initialization
-% stDRM Mode
-stDRM.mode = 2; % Corresponds to Mode B
-% Spectrum Occupancy
+stDRM.mode = 4;      % Corresponds to Mode B
 stDRM.occupancy = 3;
 
 %% stOFDM Initialization
@@ -18,89 +26,9 @@ stOFDM.iNg = get_drm_n_guard(stDRM.mode,stDRM.occupancy);
 stOFDM.iNs = stOFDM.iNfft + stOFDM.iNg;
 
 %% Generate DRM Frame
-% Number of Symbols per frame
-iNOfSymbols = get_drm_symbols_per_frame(stDRM.mode);
-
-% Initialize Frame Matrix
-Slk = get_drm_data_template_frame(stDRM.mode, stDRM.occupancy);
-
-% Load Image
-image = imread('image.png');
-%image = image(1:20,1:20,:);
-image_size = size(image);
-
-% Reconstruct the image to a vector
-viImage = image(:)';
-
-% Concat Call Sign
-call_sign = uint8(double('DL0FHR'));
-viData = [call_sign, viImage];
-
-%convert to binary 8-bits per integer
-binaryData8 = de2bi(viData, 8, 'left-msb');
-
-% reshape to 4-bits per row
-[m,n]=size(binaryData8);
-binaryData4 = reshape(binaryData8', n/2, m*2)';
-
-% converte back to integer
-viData = bi2de(binaryData4,'left-msb');
-
-% Datamapping: M-QAM
-M = 16;     % 4 bits per row -> 16 possible values
-viDlk = qammod(viData,M);
-
-% concat rows one after another
-viDlk = reshape(viDlk.',1,[]); 
-
-% Set Data in Slk
-vSlk = reshape(Slk',1,[]);
-
-% Calculate Data per Frame 
-DataPerFrame = sum(vSlk);
-
-% Calculate needed number of Frames
-slkCtr = 1;
-dataCtr = 1;
-resultCtr = 1;
-iNofFramesNeeded = ceil( size(viDlk, 2) / DataPerFrame );
-
-% Preallocate viDataPadded
-viDataPadded = zeros(1, iNofFramesNeeded);
-
-% Pad Data with Zeros at Pilot Positions
-while dataCtr <= size(viDlk, 2)
-    if vSlk(slkCtr) == 1
-        viDataPadded(resultCtr) = viDlk(dataCtr);
-        dataCtr = dataCtr + 1;
-    else
-        % already zero
-    end
-    slkCtr = mod(slkCtr, 15*256) + 1; % 15*256 = len of Slk
-    resultCtr = resultCtr + 1;
-end
-
-% Zeropadding at end for full DRM frames
-nRows = ceil(size(viDataPadded, 2) / 256);
-nRowsPad = 15 - mod(nRows, 15);
-nRows = nRows + nRowsPad;
-
-zData = zeros(1, nRows * 256);
-zData(1:size(viDataPadded,2)) = viDataPadded;
-
-% Reshape to Frameshape
-viDataPadded = reshape(zData, 256, [])';
-Slk = viDataPadded;
-
-% Generate Pilots
-Plk = get_drm_pilot_frame(stDRM.mode,stDRM.occupancy);
-
-% Duplicate Pilots to length of Slk
-iNOfFrames = nRows / iNOfSymbols;
-Plk = repmat(Plk,[iNOfFrames 1]);
-
-% Set Pilots in Slk
-Slk(Plk ~= 0) = Plk(Plk ~= 0);
+% Call the function to generate the DRM frame
+image_path = 'image_small.png';
+[Slk, M, image_size, iNofFramesNeeded, iNOfFrames] = generate_drm_frames(stDRM, stOFDM, image_path, 'DL0FHR');
 
 %% OFDM Modulator
 % IFFT
@@ -113,17 +41,9 @@ SlkTemp = [SlkTemp(:,end-stOFDM.iNg+1:end) SlkTemp];
 SlkTemp = SlkTemp.';
 vfcTransmitSignal = SlkTemp(:);
 
-% Repeat iG Frames
-iG = 2;
-vfcTransmitSignal = repmat(vfcTransmitSignal,iG,1);
-
-%% Initialize Satellite Communication specific parameters for QO-100 - Adalm Pluto
-% Link budget calculation etc
-stSat = init_qo100_params();
-
 %% Channel
 % Switch Channels
-iSwitchChannel = 1;
+iSwitchChannel = 3;
 
 switch iSwitchChannel
 
@@ -134,16 +54,37 @@ switch iSwitchChannel
     case 1 % simulated channel
         fprintf('Using simulated channel...\n');
 
+        % Repeat iG Frames
+        iG = 2;
+        vfcTransmitSignal = repmat(vfcTransmitSignal,iG,1);
+
         stChannel = initChannel();
         vfcReceiveSignal = channel_sim(vfcTransmitSignal,stChannel);
 
     case 2 % Simulate Satellite Communication for Q0-100
-       vfcReceiveSignal = simulate_qo100_channel(vfcTransmitSignal, stSat);
+
+        % Repeat iG Frames
+        iG = 2;
+        vfcTransmitSignal = repmat(vfcTransmitSignal,iG,1);
+
+        vfcReceiveSignal = simulate_qo100_channel(vfcTransmitSignal, stSat);
 
     case 3 % Use Adalm Pluto
         fprintf('Using Adalm Pluto...\n');
-        stAdalmPluto = initSDR(stSat.sampleRate, stSat.fc, stSat.TxGain, stSat.RxGain);
-        vfcReceiveSignal = LoopbackAdalmPluto(vfcTransmitSignal, stAdalmPluto);
+        % SDR parameters are now integrated in stSat
+        vfcReceiveSignal = LoopbackAdalmPluto(vfcTransmitSignal, stSat, 1);
+
+        % iFrameLength = stOFDM.iNs*iNOfSymbols*10;
+        % iNOfTransmits = size(vfcTransmitSignal) / iFrameLength;
+        %
+        % vfcReceiveSignal = zeros(size(vfcTransmitSignal));
+        %
+        % for i = 1:iNOfTransmits
+        %     startIdx = ((i-1)*iFrameLength)+1;
+        %     endIdx = startIdx + iFrameLength;
+        %     buf = LoopbackAdalmPluto(vfcTransmitSignal(startIdx:endIdx), stSat, i);
+        %     vfcReceiveSignal(startIdx:endIdx) = buf(1:iFrameLength+1);
+        % end
 
 end
 
@@ -167,12 +108,12 @@ mX(4,:) = circshift(vfcReceiveSignal,[112 0])';
 
 % Calculate Robustnes Mode
 [~, iModeEst] = max(abs(mX*vfcReceiveSignal));
-iOcc = 3;
+iOcc = stDRM.occupancy;
 % Determine OFDM Parameters for estimated Robustnes Mode
 % FFT length
-iNfft = get_drm_n_useful(iModeEst,3); % Occupancy fixed at 3
+iNfft = get_drm_n_useful(iModeEst,iOcc);
 % Guard Intervall Length
-iNg = get_drm_n_guard(iModeEst,3);% Occupancy fixed at 3
+iNg = get_drm_n_guard(iModeEst,iOcc);
 % Complete Symbol length
 iNs = iNfft + iNg;
 % Number of Symols per DRM Frame
@@ -182,51 +123,9 @@ strModes = ['A','B','C','D'];
 fprintf('Robustness Mode: %s\n', strModes(iModeEst));
 
 %% Synchronization
-% Number of Symbols in CaptureBuffer
-iNOfSymbols = floor(length(vfcReceiveSignal)/iNs);
-
-% Timing Recovery with Cyclic Prefix
-vIndexGI = [0:iNg-1].';
-R = zeros(1,iNs);
-
-for l = 0:iNOfSymbols-2
-for k = 1:iNs
-    % Calculate Correlation
-    %R(k) = R(k) + vfcReceiveSignal(k+vIndexGI+l*iNs)'*vfcReceiveSignal(k+vIndexGI+iNfft+l*iNs);
-    R(k) = R(k) + sum(conj(vfcReceiveSignal(k+vIndexGI+l*iNs)).*vfcReceiveSignal(k+vIndexGI+iNfft+l*iNs));
-
-end
-end
-
-[~ ,iStartSample] = max(abs(R));
-dOmegaEst = angle(R(iStartSample))/iNfft;
-
-% Compensate Frequency Offset
-vfcPhaser = exp(-1*j*dOmegaEst*[0:length(vfcReceiveSignal)-1]);
-vfcPhaser = vfcPhaser(:);
-vfcReceiveSignal = vfcReceiveSignal .* vfcPhaser;
-
-% Adjust to Start Sample
-vfcReceiveSignal = vfcReceiveSignal(iStartSample:end);
-
-if SwitchDemoSync
-    figure(101)
-    plot([0:iNs-1],abs(R))
-    xlabel('k')
-    ylabel('R_{xy}(k)')
-    hold on
-    plot(iStartSample, abs(R(iStartSample)),'ro')
-    hold off
-
-    % figure;
-    % plot(abs(sum(reshape(filter(ones(1,iNg),1,vfcReceiveSignal.*conj(circshift(vfcReceiveSignal,[iNfft 0]))),iNs,iNOfSymbols),2)))
-end
+vfcReceiveSignal = sync(vfcReceiveSignal, iNs, iNg, iNfft, SwitchDemoSync);
 
 %% OFDM Demodulator
-% Ensure vfcReceiveSignal is divisible by iNs
-iNOfSymbols = floor(length(vfcReceiveSignal)/iNs);
-vfcReceiveSignal = vfcReceiveSignal(1:iNOfSymbols*iNs);
-
 % Serial to Parallel Conversion
 RlkTemp = reshape(vfcReceiveSignal,stOFDM.iNs,[]).';
 
@@ -238,7 +137,7 @@ Rlk = fftshift(fft(RlkTemp,stOFDM.iNfft,2),2);
 
 %% Frame Detection
 % Generate Pilots
-Plk = get_drm_pilot_frame(iModeEst,3);
+Plk = get_drm_pilot_frame(iModeEst,iOcc);
 % Calculate Correlation Metrik
 Mlk = xcorr2(Rlk,Plk);
 Mlk(1:iNOfSymbolsPerFrame-1,:) = [];
@@ -273,49 +172,33 @@ end
 
 % Run first Frame
 Rlk = vertcat(stRlk{1:iNofFramesNeeded});
-iNOfSymbols = iNofFramesNeeded * iNOfSymbolsPerFrame;
+iNOfSymbolsTotal = iNofFramesNeeded * iNOfSymbolsPerFrame;
 
 %% Fine Synchronization
-% Use the fine_sync function to perform linear phase correction
-Rlk = fine_sync(Rlk, Plk, iNfft, iNOfSymbolsPerFrame, SwitchDemoSync);
+Plk = get_drm_pilot_frame(iModeEst,iOcc);
+% Plk = repmat(Plk,[iNofFramesNeeded 1]);
+
+% Call the fine synchronization function for each frame to correct phase errors
+for iFrame = 1:iNofFramesNeeded
+    icurFrameStart = (iFrame-1)*iNOfSymbolsPerFrame+1;
+    icurFrameEnd = iFrame*iNOfSymbolsPerFrame;
+    Rlk(icurFrameStart:icurFrameEnd,:) = fine_sync(Rlk(icurFrameStart:icurFrameEnd,:), Plk, iNfft, SwitchDemoSync);
+end
 
 %% Channel Estimation and Equalization
 cInterpolater = 'Wiener';  % 'Spline' or 'Wiener'
-Rlk = channel_estimation_equalization(Rlk, Plk, stOFDM.iNfft, stOFDM.iNg, iModeEst, iOcc, cInterpolater, SwitchDemoSync);
-
-%% Reconstruct Image
-
-% Template for the extraction of the data
-SlkTemp = repmat(get_drm_data_template_frame(stDRM.mode, stDRM.occupancy), size(Rlk,1)/15, 1);
-
-% initialize empty vektor for the data
-viReceivedDlk = [];
-
-% fill the vektor row by row with the data from Rlk
-for iRow = 1:size(Rlk, 1)
-    viReceivedDlk = [viReceivedDlk, Rlk(iRow, SlkTemp(iRow, :) == 1)];
+for iFrame = 1:iNofFramesNeeded
+    icurFrameStart = (iFrame-1)*iNOfSymbolsPerFrame+1;
+    icurFrameEnd = iFrame*iNOfSymbolsPerFrame;
+    Rlk(icurFrameStart:icurFrameEnd,:) = channel_estimation_equalization(Rlk(icurFrameStart:icurFrameEnd,:), Plk, stOFDM.iNfft, stOFDM.iNg, iModeEst, iOcc, cInterpolater, SwitchDemoSync);
 end
 
-% QAM-Demodulation
-DataReceived = qamdemod(viReceivedDlk', M);
+%% Reconstruct Image
+% Call the external function to reconstruct the image
+[reconstructed_image, Received_call_sign] = reconstruct_drm_image(Rlk, stDRM, M, image_size);
 
-% Convert Data to binary
-binaryData4 = de2bi(DataReceived, 4, 'left-msb'); 
-
-% reshape Data to 8-bit per row
-[m,n]=size(binaryData4);
-binaryData8 = reshape(binaryData4', n*2, m/2)'; 
-
-% Reconversion to integer
-viReceivedData = bi2de(binaryData8,'left-msb');
-
-% extract Call-Sign
-Received_call_sign = viReceivedData(1:6);
+% Display the call sign
 fprintf('Received call sign: %s\n', char(Received_call_sign));
-viImageReceived = viReceivedData(7:prod(image_size)+6);
-
-% reconstruct image from Received data
-reconstructed_image = reshape(viImageReceived, image_size);
 
 %% Graphical Output
 SlkTemp = repmat(get_drm_data_template_frame(stDRM.mode, stDRM.occupancy), iNofFramesNeeded, 1);
@@ -337,6 +220,7 @@ ylabel('Q')
 title('Transmit Constellation')
 
 subplot(2,3,3)
+image = imread(image_path);
 imshow(uint8(image));
 
 subplot(2,3,4)
@@ -363,7 +247,7 @@ if SwitchDemoSync
     figure(2)
     subplot(3,2,[1 3 5])
     mfcPhase = angle(conj(Slk).*Rlk);
-    imagesc((1:stOFDM.iNfft)-get_drm_dc_position(stDRM.mode,stDRM.occupancy),0:iNOfSymbols-1,mfcPhase)
+    imagesc((1:stOFDM.iNfft)-get_drm_dc_position(stDRM.mode,stDRM.occupancy),0:iNOfSymbolsTotal-1,mfcPhase)
     xlabel('Subchannel k')
     ylabel('Symbol l')
     title('Phase Difference')
@@ -371,7 +255,7 @@ if SwitchDemoSync
     fpilot_position = get_drm_fpilot_position(stDRM.mode)+get_drm_dc_position(stDRM.mode,stDRM.occupancy);
     dc_position = get_drm_dc_position(stDRM.mode,stDRM.occupancy);
     subplot(3,2,2)
-    plot(0:iNOfSymbols-1,mfcPhase(:,fpilot_position(1)))
+    plot(0:iNOfSymbolsTotal-1,mfcPhase(:,fpilot_position(1)))
     xlabel('Symbol l')
     ylabel('Phase Difference in rad')
     title(['1st fPilot / Subchannel:  ' num2str(fpilot_position(1)-dc_position)])
@@ -379,7 +263,7 @@ if SwitchDemoSync
 
 
     subplot(3,2,4)
-    plot(0:iNOfSymbols-1,mfcPhase(:,fpilot_position(2)))
+    plot(0:iNOfSymbolsTotal-1,mfcPhase(:,fpilot_position(2)))
     xlabel('Symbol l')
     ylabel('Phase Difference in rad')
     title(['2nd fPilot / Subchannel:  ' num2str(fpilot_position(2)-dc_position)])
@@ -387,7 +271,7 @@ if SwitchDemoSync
 
 
     subplot(3,2,6)
-    plot(0:iNOfSymbols-1,mfcPhase(:,fpilot_position(3)))
+    plot(0:iNOfSymbolsTotal-1,mfcPhase(:,fpilot_position(3)))
     xlabel('Symbol l')
     ylabel('Phase Difference in rad')
     title(['3rd fPilot / Subchannel:  ' num2str(fpilot_position(3)-dc_position)])
