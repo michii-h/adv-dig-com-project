@@ -114,7 +114,7 @@ SlkTemp = SlkTemp.';
 vfcTransmitSignal = SlkTemp(:);
 
 % Repeat iG Frames
-iG = 3;
+iG = 2;
 vfcTransmitSignal = repmat(vfcTransmitSignal,iG,1);
 
 %% Initialize Satellite Communication specific parameters for QO-100 - Adalm Pluto
@@ -123,7 +123,7 @@ stSat = init_qo100_params();
 
 %% Channel
 % Switch Channels
-iSwitchChannel = 0;
+iSwitchChannel = 1;
 
 switch iSwitchChannel
 
@@ -192,7 +192,9 @@ R = zeros(1,iNs);
 for l = 0:iNOfSymbols-2
 for k = 1:iNs
     % Calculate Correlation
-    R(k) = R(k) + vfcReceiveSignal(k+vIndexGI+l*iNs)'*vfcReceiveSignal(k+vIndexGI+iNfft+l*iNs);
+    %R(k) = R(k) + vfcReceiveSignal(k+vIndexGI+l*iNs)'*vfcReceiveSignal(k+vIndexGI+iNfft+l*iNs);
+    R(k) = R(k) + sum(conj(vfcReceiveSignal(k+vIndexGI+l*iNs)).*vfcReceiveSignal(k+vIndexGI+iNfft+l*iNs));
+
 end
 end
 
@@ -200,7 +202,7 @@ end
 dOmegaEst = angle(R(iStartSample))/iNfft;
 
 % Compensate Frequency Offset
-vfcPhaser = exp(-j*dOmegaEst*[0:length(vfcReceiveSignal)-1]);
+vfcPhaser = exp(-1*j*dOmegaEst*[0:length(vfcReceiveSignal)-1]);
 vfcPhaser = vfcPhaser(:);
 vfcReceiveSignal = vfcReceiveSignal .* vfcPhaser;
 

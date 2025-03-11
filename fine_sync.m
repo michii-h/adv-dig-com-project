@@ -68,7 +68,7 @@ function [Rlk_out] = fine_sync(Rlk_in, Plk, iNfft, iNOfSymbolsPerFrame, SwitchDe
             mPhaseEst = m(1)*kAxis + m(2);
 
             % Apply phase correction to current symbol
-            Rlk_out(iFrameStart+l-1, :) = Rlk_out(iFrameStart+l-1, :) .* exp(-j*mPhaseEst);
+            Rlk_out(iFrameStart+l-1, :) = Rlk_out(iFrameStart+l-1, :) .* exp(-1*j*mPhaseEst);
         end
     end
 end
