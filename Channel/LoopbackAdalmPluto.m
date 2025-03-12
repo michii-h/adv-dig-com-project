@@ -1,4 +1,4 @@
-function [vfcCaptureBuffer] = LoopbackAdalmPluto(vfcTransmitSignal, stSat, i)
+function [vfcCaptureBuffer] = LoopbackAdalmPluto(vfcTransmitSignal, link, i)
     % Ensure Column Vector
     x = vfcTransmitSignal(:);
 
@@ -6,48 +6,44 @@ function [vfcCaptureBuffer] = LoopbackAdalmPluto(vfcTransmitSignal, stSat, i)
     powerScaleFactor = 0.9;
     txWaveform = x.*(1/max(abs(x))*powerScaleFactor);
 
-    bandwidth = stSat.bandwidth;
-    iOsf = stSat.oversampling_factor;
+    % Get parameters from link object
+    bandwidth = link.baseStation.baseband_sample_rate;
+    iOsf = link.baseStation.oversampling_factor;
 
     % Calculate required sample rate based on bandwidth
     % Using a factor of 2.5x bandwidth to ensure Nyquist and some margin
     requiredFs = bandwidth * 2.5;
 
     % Check if the sample rate is compatible with the bandwidth requirement
-    if stSat.fs > requiredFs
+    if link.baseStation.baseband_sample_rate > requiredFs
         warning('Sample rate (%.1f kHz) may be too high for %.1f kHz bandwidth. Consider reducing to ~%.1f kHz.',...
-                stSat.fs/1e3, bandwidth/1e3, requiredFs/1e3);
+                link.baseStation.baseband_sample_rate/1e3, bandwidth/1e3, requiredFs/1e3);
     end
 
     txWaveform = resample(txWaveform, iOsf, 1);
 
     % Init Transmission
-    fs = stSat.fs*iOsf;     % Symbol rate with oversampling
+    fs = link.baseStation.baseband_sample_rate*iOsf;     % Symbol rate with oversampling
 
-    % Set TX and RX frequencies
-    if isfield(stSat, 'fcTx') && isfield(stSat, 'fcRx')
-        fcTx = stSat.fcTx;
-        fcRx = stSat.fcRx;
-    else
-        fcTx = stSat.fc;
-        fcRx = stSat.fc;
-    end
+    % Set TX and RX frequencies from the link object
+    fcTx = link.baseStation.tx_center_frequency;
+    fcRx = link.rx_center_frequency;
 
-    % Ensure TX gain is within valid range for Adalm Pluto
-    TxGain = stSat.txGain;
-    RxGain = stSat.rxGain;
+    % Get TX and RX gain from link object
+    TxGain = link.baseStation.tx_gain;
+    RxGain = link.baseStation.rx_gain;
 
-    % Calculate approximate output power based on gain setting
-    approxPowerDbm = stSat.max_power_dbm + TxGain;  % Reduce by gain amount (negative dB)
+    % Calculate approximate output power
+    approxPowerDbm = link.baseStation.tx_power;
 
     if i==1
         fprintf('Using Adalm Pluto for QO-100:\n');
         fprintf(' - TX Frequency: %.6f MHz\n', fcTx/1e6);
         fprintf(' - RX Frequency: %.6f MHz\n', fcRx/1e6);
         fprintf(' - Sample Rate: %.3f MHz\n', fs/1e6);
-        fprintf(' - Bandwidth Limit: %.1f kHz\n', bandwidth/1e3);
-        fprintf(' - TX Gain: %.2f dB (range: -89.75 to 0 dB, where 0 dB is max power)\n', TxGain);
-        fprintf(' - Approximate TX Power: %.2f dBm\n', approxPowerDbm);
+        fprintf(' - Bandwidth: %.1f kHz\n', bandwidth/1e3);
+        fprintf(' - TX Gain: %.2f dB\n', TxGain);
+        fprintf(' - TX Power: %.2f dBm\n', approxPowerDbm);
         fprintf(' - RX Gain: %.2f dB\n', RxGain);
     end
 

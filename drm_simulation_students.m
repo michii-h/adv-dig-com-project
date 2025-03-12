@@ -4,18 +4,22 @@ start_up;
 SwitchDemoSync = false; % additional plots for Demo
 
 %% Transmission Parameters Initialization
-% Link budget calculation etc
-stSat = init_qo100_params();
+% Create SatelliteLink object with appropriate parameters
+link = SatelliteLink('tx_center_frequency', 2400.172 * 1e6, 'tx_gain', 0, 'rx_gain', 50, 'tx_power', 7);
+link.useSameFrequency = true;
+link.displayLinkBudget();
 
 %% DRM Bandwidth Calculation
 % Calculate the bandwidth for the DRM modes
-calculate_drm_bandwidth(stSat.fs);
+% calculate_drm_bandwidth(link.baseStation.baseband_sample_rate);
 % This function will show which combinations meet the 2.7kHz constraint
 % Take note of the valid combinations from the output table
 
 %% DRM Initialization
 stDRM.mode = 4;      % Corresponds to Mode D
 stDRM.occupancy = 3;
+
+check_drm_bandwidth(link.baseStation.baseband_sample_rate, stDRM.mode, stDRM.occupancy);
 
 %% stOFDM Initialization
 % FFT length
@@ -28,7 +32,6 @@ stOFDM.iNs = stOFDM.iNfft + stOFDM.iNg;
 %% Generate DRM Frame
 % Call the function to generate the DRM frame
 image_path = 'th-rosenheim-logo-colored.png';
-call_sign = 'DL0FHR';
 [Slk, M, image_size, iNofFramesNeeded, iNOfFrames] = generate_drm_frames(stDRM, stOFDM, image_path, 'DL0FHR');
 
 %% OFDM Modulator
@@ -50,11 +53,6 @@ switch iSwitchChannel
 
     case 0 % ideal channel
         fprintf('Using ideal channel...\n');
-
-         % Repeat iG Frames
-        iG = 2;
-        vfcTransmitSignal = repmat(vfcTransmitSignal,iG,1);
-
         vfcReceiveSignal = vfcTransmitSignal;
 
     case 1 % simulated channel
@@ -73,25 +71,13 @@ switch iSwitchChannel
         iG = 2;
         vfcTransmitSignal = repmat(vfcTransmitSignal,iG,1);
 
-        vfcReceiveSignal = simulate_qo100_channel(vfcTransmitSignal, stSat);
+        % Update to use the link object instead of stSat
+        vfcReceiveSignal = simulate_qo100_channel(vfcTransmitSignal, link);
 
     case 3 % Use Adalm Pluto
         fprintf('Using Adalm Pluto...\n');
-        % SDR parameters are now integrated in stSat
-        vfcReceiveSignal = LoopbackAdalmPluto(vfcTransmitSignal, stSat, 1);
-
-        % iFrameLength = stOFDM.iNs*iNOfSymbols*10;
-        % iNOfTransmits = size(vfcTransmitSignal) / iFrameLength;
-        %
-        % vfcReceiveSignal = zeros(size(vfcTransmitSignal));
-        %
-        % for i = 1:iNOfTransmits
-        %     startIdx = ((i-1)*iFrameLength)+1;
-        %     endIdx = startIdx + iFrameLength;
-        %     buf = LoopbackAdalmPluto(vfcTransmitSignal(startIdx:endIdx), stSat, i);
-        %     vfcReceiveSignal(startIdx:endIdx) = buf(1:iFrameLength+1);
-        % end
-
+        % SDR come from the link object
+        vfcReceiveSignal = LoopbackAdalmPluto(vfcTransmitSignal, link, 1);
 end
 
 %% Detect Robustness Mode
@@ -201,7 +187,7 @@ end
 
 %% Reconstruct Image
 % Call the external function to reconstruct the image
-[reconstructed_image, Received_call_sign] = reconstruct_drm_image(Rlk, stDRM, M, image_size, call_sign);
+[reconstructed_image, Received_call_sign] = reconstruct_drm_image(Rlk, stDRM, M, image_size);
 
 % Display the call sign
 fprintf('Received call sign: %s\n', char(Received_call_sign));
