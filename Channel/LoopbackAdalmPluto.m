@@ -1,4 +1,4 @@
-function [vfcCaptureBuffer] = LoopbackAdalmPluto(vfcTransmitSignal, link, i)
+function [vfcCaptureBuffer] = LoopbackAdalmPluto(vfcTransmitSignal, link)
     % Ensure Column Vector
     x = vfcTransmitSignal(:);
 
@@ -33,19 +33,7 @@ function [vfcCaptureBuffer] = LoopbackAdalmPluto(vfcTransmitSignal, link, i)
     TxGain = link.baseStation.tx_gain;
     RxGain = link.baseStation.rx_gain;
 
-    % Calculate approximate output power
-    approxPowerDbm = link.baseStation.tx_power;
-
-    if i==1
-        fprintf('Using Adalm Pluto for QO-100:\n');
-        fprintf(' - TX Frequency: %.6f MHz\n', fcTx/1e6);
-        fprintf(' - RX Frequency: %.6f MHz\n', fcRx/1e6);
-        fprintf(' - Sample Rate: %.3f MHz\n', fs/1e6);
-        fprintf(' - Bandwidth: %.1f kHz\n', bandwidth/1e3);
-        fprintf(' - TX Gain: %.2f dB\n', TxGain);
-        fprintf(' - TX Power: %.2f dBm\n', approxPowerDbm);
-        fprintf(' - RX Gain: %.2f dB\n', RxGain);
-    end
+    fprintf('\nUsing Adalm Pluto ...\n');
 
     % Set up TX Radio
     tx = sdrtx('Pluto');
@@ -63,15 +51,12 @@ function [vfcCaptureBuffer] = LoopbackAdalmPluto(vfcTransmitSignal, link, i)
     rx.OutputDataType       = 'double';
 
     % Pass data through radio
-    if i==1
-        fprintf('\nStarting transmission.\n')
-    end
+    fprintf('\nStarting transmission.\n')
     transmitRepeat(tx,txWaveform);
 
     captureLength = 2*length(x)*iOsf;
-    if i==1
-        fprintf('\nStarting capturing.\n')
-    end
+
+    fprintf('\nStarting capturing.\n')
     vfcCaptureBuffer = capture(rx, captureLength, 'Samples');
 
     vfcCaptureBuffer = resample(vfcCaptureBuffer,1,iOsf);

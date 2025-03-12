@@ -200,24 +200,24 @@ classdef SatelliteLink
 
         %% Ausgabe der Link Budget Ergebnisse
         function displayLinkBudget(obj)
-            fprintf('--- Link Budget Results ---\n');
-            fprintf('Base Station TX Center Frequency: %.2f Hz\n', obj.baseStation.tx_center_frequency);
-            fprintf('Calculated RX (Downlink) Center Frequency: %.2f Hz\n', obj.rx_center_frequency);
-            fprintf('Baseband Sample Rate: %.2f Hz\n', obj.baseStation.baseband_sample_rate);
-            fprintf('TX Gain: %.2f dB\n', obj.baseStation.tx_gain);
-            fprintf('RX Gain: %.2f dB\n', obj.baseStation.rx_gain);
-            fprintf('Antenna Gain (Uplink): %.2f dBi\n', obj.G_ground_u);
-            fprintf('Antenna Gain (Downlink): %.2f dBi\n', obj.G_ground_d);
-            fprintf('Cable Loss: %.2f dB\n', obj.cable_loss);
-            fprintf('FSPL Uplink: %.2f dB\n', obj.FSPL_u);
-            fprintf('FSPL Downlink: %.2f dB\n', obj.FSPL_d);
-            fprintf('Rain Attenuation: %.2f dB\n', obj.A_rain);
-            fprintf('EIRP Base Station (Uplink): %.2f dBm\n', obj.EIRP_ground_u);
-            fprintf('Power Received at Satellite (Uplink): %.2f dBm\n', obj.P_sat_rx);
-            fprintf('EIRP Satellite (Downlink): %.2f dBm\n', obj.EIRP_sat);
-            fprintf('Power Received at Base Station (Downlink): %.2f dBm\n', obj.P_rx_ground);
-            fprintf('Receiver Noise Power: %.2f dBm\n', obj.N_dBm);
-            fprintf('SNR: %.2f dB (%.2f linear)\n', obj.SNR_dB, obj.SNR_linear);
+            fprintf('Link Budget Results\n');
+            fprintf('  Base Station TX Center Frequency: %.2f Hz\n', obj.baseStation.tx_center_frequency);
+            fprintf('  Calculated RX (Downlink) Center Frequency: %.2f Hz\n', obj.rx_center_frequency);
+            fprintf('  Baseband Sample Rate: %.2f Hz\n', obj.baseStation.baseband_sample_rate);
+            fprintf('  TX Gain: %.2f dB\n', obj.baseStation.tx_gain);
+            fprintf('  RX Gain: %.2f dB\n', obj.baseStation.rx_gain);
+            fprintf('  Antenna Gain (Uplink): %.2f dBi\n', obj.G_ground_u);
+            fprintf('  Antenna Gain (Downlink): %.2f dBi\n', obj.G_ground_d);
+            fprintf('  Cable Loss: %.2f dB\n', obj.cable_loss);
+            fprintf('  FSPL Uplink: %.2f dB\n', obj.FSPL_u);
+            fprintf('  FSPL Downlink: %.2f dB\n', obj.FSPL_d);
+            fprintf('  Rain Attenuation: %.2f dB\n', obj.A_rain);
+            fprintf('  EIRP Base Station (Uplink): %.2f dBm\n', obj.EIRP_ground_u);
+            fprintf('  Power Received at Satellite (Uplink): %.2f dBm\n', obj.P_sat_rx);
+            fprintf('  EIRP Satellite (Downlink): %.2f dBm\n', obj.EIRP_sat);
+            fprintf('  Power Received at Base Station (Downlink): %.2f dBm\n', obj.P_rx_ground);
+            fprintf('  Receiver Noise Power: %.2f dBm\n', obj.N_dBm);
+            fprintf('  SNR: %.2f dB (%.2e linear)\n', obj.SNR_dB, obj.SNR_linear);
         end
     end
 end

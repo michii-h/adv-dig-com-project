@@ -9,11 +9,11 @@ link = SatelliteLink('tx_center_frequency', 2400.172 * 1e6, 'tx_gain', 0, 'rx_ga
 link.useSameFrequency = true;
 link.displayLinkBudget();
 
-%% DRM Bandwidth Calculation
-% Calculate the bandwidth for the DRM modes
-% calculate_drm_bandwidth(link.baseStation.baseband_sample_rate);
-% This function will show which combinations meet the 2.7kHz constraint
-% Take note of the valid combinations from the output table
+%% Bit Error Rate Calculation from expected SNR
+ModOrder = 16;
+BER_sim = berawgn(link.SNR_linear, 'qam', ModOrder);
+
+fprintf('  Simulated BER: %.2e\n', BER_sim);
 
 %% DRM Initialization
 stDRM.mode = 4;      % Corresponds to Mode D
@@ -32,7 +32,8 @@ stOFDM.iNs = stOFDM.iNfft + stOFDM.iNg;
 %% Generate DRM Frame
 % Call the function to generate the DRM frame
 image_path = 'th-rosenheim-logo-colored.png';
-[Slk, M, image_size, iNofFramesNeeded, iNOfFrames] = generate_drm_frames(stDRM, stOFDM, image_path, 'DL0FHR');
+call_sign = 'DL0FHR';
+[Slk, M, image_size, iNofFramesNeeded, iNOfFrames] = generate_drm_frames(stDRM, stOFDM, image_path, call_sign);
 
 %% OFDM Modulator
 % IFFT
@@ -75,44 +76,12 @@ switch iSwitchChannel
         vfcReceiveSignal = simulate_qo100_channel(vfcTransmitSignal, link);
 
     case 3 % Use Adalm Pluto
-        fprintf('Using Adalm Pluto...\n');
         % SDR come from the link object
-        vfcReceiveSignal = LoopbackAdalmPluto(vfcTransmitSignal, link, 1);
+        vfcReceiveSignal = LoopbackAdalmPluto(vfcTransmitSignal, link);
 end
 
 %% Detect Robustness Mode
-% force vfcReceiveSignal to be a column vector
-vfcReceiveSignal = vfcReceiveSignal(:);
-
-if SwitchDemoSync
-    figure(100)
-    plot(-length(vfcReceiveSignal)+1:length(vfcReceiveSignal)-1,abs(xcorr((vfcReceiveSignal))))
-    xlabel('\Delta k')
-    ylabel('r_{xx}(\Delta k)')
-end
-
-% Detect Robustness by autocorrelation at dk = [288 256 176 112]
-% Autocorrelation matrix at dk corresponding to FFT lengths
-mX(1,:) = circshift(vfcReceiveSignal,[288 0])';
-mX(2,:) = circshift(vfcReceiveSignal,[256 0])';
-mX(3,:) = circshift(vfcReceiveSignal,[176 0])';
-mX(4,:) = circshift(vfcReceiveSignal,[112 0])';
-
-% Calculate Robustnes Mode
-[~, iModeEst] = max(abs(mX*vfcReceiveSignal));
-iOcc = stDRM.occupancy;
-% Determine OFDM Parameters for estimated Robustnes Mode
-% FFT length
-iNfft = get_drm_n_useful(iModeEst,iOcc);
-% Guard Intervall Length
-iNg = get_drm_n_guard(iModeEst,iOcc);
-% Complete Symbol length
-iNs = iNfft + iNg;
-% Number of Symols per DRM Frame
-iNOfSymbolsPerFrame = get_drm_symbols_per_frame(iModeEst);
-
-strModes = ['A','B','C','D'];
-fprintf('Robustness Mode: %s\n', strModes(iModeEst));
+[iModeEst, iNfft, iNg, iNs, iNOfSymbolsPerFrame] = detect_robustness_mode(vfcReceiveSignal, stDRM.occupancy, SwitchDemoSync);
 
 %% Synchronization
 vfcReceiveSignal = sync(vfcReceiveSignal, iNs, iNg, iNfft, SwitchDemoSync);
@@ -129,7 +98,7 @@ Rlk = fftshift(fft(RlkTemp,stOFDM.iNfft,2),2);
 
 %% Frame Detection
 % Generate Pilots
-Plk = get_drm_pilot_frame(iModeEst,iOcc);
+Plk = get_drm_pilot_frame(iModeEst,stDRM.occupancy);
 % Calculate Correlation Metrik
 Mlk = xcorr2(Rlk,Plk);
 Mlk(1:iNOfSymbolsPerFrame-1,:) = [];
@@ -167,7 +136,7 @@ Rlk = vertcat(stRlk{1:iNofFramesNeeded});
 iNOfSymbolsTotal = iNofFramesNeeded * iNOfSymbolsPerFrame;
 
 %% Fine Synchronization
-Plk = get_drm_pilot_frame(iModeEst,iOcc);
+Plk = get_drm_pilot_frame(iModeEst,stDRM.occupancy);
 % Plk = repmat(Plk,[iNofFramesNeeded 1]);
 
 % Call the fine synchronization function for each frame to correct phase errors
@@ -182,12 +151,17 @@ cInterpolater = 'Wiener';  % 'Spline' or 'Wiener'
 for iFrame = 1:iNofFramesNeeded
     icurFrameStart = (iFrame-1)*iNOfSymbolsPerFrame+1;
     icurFrameEnd = iFrame*iNOfSymbolsPerFrame;
-    Rlk(icurFrameStart:icurFrameEnd,:) = channel_estimation_equalization(Rlk(icurFrameStart:icurFrameEnd,:), Plk, stOFDM.iNfft, stOFDM.iNg, iModeEst, iOcc, cInterpolater, SwitchDemoSync);
+    Rlk(icurFrameStart:icurFrameEnd,:) = channel_estimation_equalization(Rlk(icurFrameStart:icurFrameEnd,:), Plk, stOFDM.iNfft, stOFDM.iNg, iModeEst, stDRM.occupancy, cInterpolater, SwitchDemoSync);
 end
+
+%% Real Bit Error Rate Calculation
+% TODO: Implement the BER calculation
+
+% [numberErrors, BER_real] = biterr(dataInBits, dataOutBits);
 
 %% Reconstruct Image
 % Call the external function to reconstruct the image
-[reconstructed_image, Received_call_sign] = reconstruct_drm_image(Rlk, stDRM, M, image_size);
+[reconstructed_image, Received_call_sign] = reconstruct_drm_image(Rlk, stDRM, M, image_size, call_sign);
 
 % Display the call sign
 fprintf('Received call sign: %s\n', char(Received_call_sign));

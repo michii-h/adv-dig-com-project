@@ -1,9 +1,5 @@
-function calculate_drm_bandwidth(fs, mode, occ)
+function check_drm_bandwidth(fs, mode, occ)
     fprintf('DRM Bandwidth for 2.7kHz constraint:\n');
-
-    fprintf('---------------------------------------------------\n');
-    fprintf('Mode | Occ | FFT Size | Carriers | Spacing (Hz) | BW (kHz)\n');
-    fprintf('---------------------------------------------------\n');
 
     % Get DRM parameters
     iNfft = get_drm_n_useful(mode, occ);
@@ -17,7 +13,10 @@ function calculate_drm_bandwidth(fs, mode, occ)
 
     if (bandwidth <= 2.7); sign = '✓' ; else; sign = '✗'; end
 
-    % Print results
-    fprintf(' %d   | %d   | %4d     | %4d     | %7.2f    | %5.2f %s\n', ...
-        mode, occ, iNfft, carriers, subcarrierSpacing, bandwidth, sign);
+    fprintf('  Mode: %d\n', mode);
+    fprintf('  Occupancy: %d\n', occ);
+    fprintf('  FFT Size: %d\n', iNfft);
+    fprintf('  Carriers: %d\n', carriers);
+    fprintf('  Spacing: %.2f Hz\n', subcarrierSpacing);
+    fprintf('  Bandwidth: %.2f kHz %s\n', bandwidth, sign);
 end
