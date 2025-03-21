@@ -1,88 +1,81 @@
-% 'tx_center_frequency', 2400.172 * 1e6, ...   % Uplink-Centerfrequenz [Hz]
-% 'baseband_sample_rate', 2.7e3, ...   % Baseband-Samplerate [Hz]
+% 'tx_center_frequency', 2400.172 * 1e6, ...   % Uplink center frequency [Hz]
+% 'baseband_sample_rate', 2.7e3, ...   % Baseband sample rate [Hz]
 % 'tx_gain', 0, ...                    % TX Gain [dB]
 % 'rx_gain', 50, ...                   % RX Gain [dB]
 
 classdef SatelliteLink
-    % Diese Klasse berechnet das Link Budget für einen Satellitenlink unter
-    % Berücksichtigung von Basisstationsparametern und Satellitenparametern.
-    % Die Basisstationsparameter (TX-/RX‑Centerfrequenz, Baseband-Samplerate,
-    % TX-/RX‑Gain, Ausgangsleistung, Kabelverluste und Antennendaten) sind in
-    % einem eigenen Strukturfeld 'baseStation' zusammengefasst.
-    %
-    % Standardmäßig wird die RX‑Centerfrequenz berechnet als:
-    %    rx_center_frequency = tx_center_frequency + transponderShift - Lo
-    % Falls useSameFrequency = true gesetzt ist, wird stattdessen
-    %    rx_center_frequency = tx_center_frequency
-    % verwendet.
+    % This class calculates the link budget for a satellite link considering
+    % base station and satellite parameters. The base station parameters
+    % (TX/RX center frequency, baseband sample rate, TX/RX gain, output power,
+    % cable losses, and antenna data) are grouped in a dedicated structure field 'baseStation'.
 
     properties
-        % Basisstationsparameter als Struktur
+        % Base station parameters as a structure
         baseStation = struct( ...
-            'tx_center_frequency', 2400.172 * 1e6, ...   % Uplink-Centerfrequenz [Hz]
-            'baseband_sample_rate', 2.7e3, ...  % Baseband-Samplerate [Hz]
-            'oversampling_factor', 25, ...      % Oversampling-Faktor
-            'tx_gain', 0, ...                   % TX Gain [dB] (Bereich: -89.75 bis 0 dB)
-            'rx_gain', 50, ...                  % RX Gain [dB] (Bereich: -4 bis 71 dB)
-            'cable_length', 12, ...             % Kabellänge [m]
-            'cable_loss_per_meter', 0.1, ...    % Kabelverlust [dB/m]
-            'tx_power', 7, ...                  % Ausgangsleistung [dBm] (Bereich: -10 bis +7 dBm)
-            'antenna_diameter', 1.2, ...        % Durchmesser der Parabolantenne [m]
-            'antenna_efficiency', 0.6 ...       % Antenneneffizienz
+            'tx_center_frequency', 2400.172 * 1e6, ...   % Uplink center frequency [Hz]
+            'baseband_sample_rate', 2.7e3, ...  % Baseband sample rate [Hz]
+            'oversampling_factor', 25, ...      % Oversampling factor
+            'tx_gain', 0, ...                   % TX Gain [dB] (Range: -89.75 to 0 dB)
+            'rx_gain', 50, ...                  % RX Gain [dB] (Range: -4 to 71 dB)
+            'cable_length', 12, ...             % Cable length [m]
+            'cable_loss_per_meter', 0.1, ...    % Cable loss [dB/m]
+            'tx_power', 7, ...                  % Output power [dBm] (Range: -10 to +7 dBm)
+            'antenna_diameter', 1.2, ...        % Parabolic antenna diameter [m]
+            'antenna_efficiency', 0.6 ...       % Antenna efficiency
             );
 
-        % Transponder- und LO-Parameter (nur genutzt, falls useSameFrequency = false)
+        % Transponder and LO parameters (only used if useSameFrequency = false)
         transponderShift = 8089.5e6; % [Hz]
         Lo = 9750e6;                 % [Hz]
 
-        % Flag: Wenn true, wird RX-Centerfrequenz gleich TX-Centerfrequenz gesetzt
+        % Flag: If true, RX center frequency is set equal to TX center frequency
         useSameFrequency = false;
 
-        % Satellitenparameter (Annahmen)
-        G_sat_rx = 30;    % Empfangsantennengewinn des Satelliten (Uplink) [dB]
-        sat_rx_loss = 2;  % Empfangsverluste im Satelliten [dB]
-        sat_amp_gain = 30;% Transponderverstärkung im Satelliten [dB]
-        sat_tx_loss = 2;  % Sendeverluste im Satelliten [dB]
-        G_sat_tx = 30;    % Satellit Sendantennengewinn (Downlink) [dB]
+        % Satellite parameters (assumptions)
+        G_sat_rx = 30;    % Satellite receive antenna gain (Uplink) [dB]
+        sat_rx_loss = 2;  % Satellite reception losses [dB]
+        sat_amp_gain = 30;% Transponder amplification gain [dB]
+        sat_tx_loss = 2;  % Satellite transmission losses [dB]
+        G_sat_tx = 30;    % Satellite transmit antenna gain (Downlink) [dB]
 
-        % Linkparameter
-        R = 35786e3;      % Entfernung zum Satelliten [m]
+        % Link parameters
+        R = 35786e3;      % Distance to satellite [m]
 
-        % Regenabschwächungsparameter (vereinfachtes ITU‑R P.618 Modell)
-        R_rain = 25;      % Regenrate in mm/h
-        El_deg = 30;      % Elevationswinkel in Grad
-        h_r = 5000;       % Effektive Regenhöhe in m
-        k_r = 0.0101;     % ITU‑R P.838 Koeffizient
-        alpha_r = 1.276;  % ITU‑R P.838 Koeffizient
-        reduction_factor = 0.6; % Reduktionsfaktor für effektive Regenpfadlänge
+        % Rain attenuation parameters (simplified ITU-R P.618 model)
+        R_rain = 25;      % Rain rate in mm/h
+        El_deg = 30;      % Elevation angle in degrees
+        h_r = 5000;       % Effective rain height in m
+        k_r = 0.0101;     % ITU-R P.838 coefficient
+        alpha_r = 1.276;  % ITU-R P.838 coefficient
+        reduction_factor = 0.6; % Reduction factor for effective rain path length
 
-        % Empfangsparameter
-        T = 290;          % Systemtemperatur in Kelvin
-        B = 1e6;          % Empfängerbandbreite in Hz
+        % Receiver parameters
+        T = 290;          % System temperature in Kelvin
+        B = 1e6;          % Receiver bandwidth in Hz
     end
 
     properties (Dependent)
-        lambda_u           % Wellenlänge für Uplink [m]
-        rx_center_frequency % Downlink-Centerfrequenz [Hz]
-        lambda_d           % Wellenlänge für Downlink [m]
-        cable_loss         % Gesamter Kabelverlust [dB]
-        G_ground_u         % Antennengewinn der Basisstation (Uplink) [dBi]
-        G_ground_d         % Antennengewinn der Basisstation (Downlink) [dBi]
-        FSPL_u             % Freiraumdämpfung (Uplink) [dB]
-        FSPL_d             % Freiraumdämpfung (Downlink) [dB]
-        A_rain             % Regenabschwächung [dB]
-        EIRP_ground_u      % EIRP der Basisstation (Uplink) [dBm]
-        P_sat_rx           % Empfangene Leistung am Satelliten (Uplink) [dBm]
-        P_sat_tx           % Ausgangsleistung des Satelliten (nach Transponder) [dBm]
-        EIRP_sat           % EIRP des Satelliten (Downlink) [dBm]
-        P_rx_ground        % Empfangene Leistung an der Basisstation (Downlink) [dBm]
-        N_dBm              % Rauschleistung des Empfängers [dBm]
-        SNR_dB             % Signal-Rausch-Verhältnis in dB
-        SNR_linear         % Signal-Rausch-Verhältnis (linear)
+        lambda_u           % Wavelength for uplink [m]
+        rx_center_frequency % Downlink center frequency [Hz]
+        lambda_d           % Wavelength for downlink [m]
+        cable_loss         % Total cable loss [dB]
+        G_ground_u         % Base station antenna gain (Uplink) [dBi]
+        G_ground_d         % Base station antenna gain (Downlink) [dBi]
+        FSPL_u             % Free space path loss (Uplink) [dB]
+        FSPL_d             % Free space path loss (Downlink) [dB]
+        A_rain             % Rain attenuation [dB]
+        EIRP_ground_u      % EIRP of base station (Uplink) [dBm]
+        P_sat_rx           % Received power at satellite (Uplink) [dBm]
+        P_sat_tx           % Output power of satellite (after transponder) [dBm]
+        EIRP_sat           % EIRP of satellite (Downlink) [dBm]
+        P_rx_ground        % Received power at base station (Downlink) [dBm]
+        N_dBm              % Receiver noise power [dBm]
+        SNR_dB             % Signal-to-noise ratio in dB
+        SNR_linear         % Signal-to-noise ratio (linear)
     end
 
     methods
-        %% Konstruktor: Überschreibt Parameter per Name-Value-Paar
+        %% Constructor: Overwrites parameters via name-value pairs
         function obj = SatelliteLink(varargin)
             if nargin > 0
                 for k = 1:2:length(varargin)
@@ -95,15 +88,15 @@ classdef SatelliteLink
             end
         end
 
-        %% Getter für abhängige Eigenschaften
+        %% Getters for dependent properties
 
-        % Uplink-Wellenlänge (basierend auf TX-Centerfrequenz)
+        % Uplink wavelength (based on TX center frequency)
         function lambda = get.lambda_u(obj)
             lambda = 3e8 / obj.baseStation.tx_center_frequency;
         end
 
-        % RX-Centerfrequenz: entweder gleich TX-Centerfrequenz oder
-        % berechnet als tx_center_frequency + transponderShift - Lo
+        % RX center frequency: either equal to TX center frequency or
+        % calculated as tx_center_frequency + transponderShift - Lo
         function f_rx = get.rx_center_frequency(obj)
             if obj.useSameFrequency
                 f_rx = obj.baseStation.tx_center_frequency;
@@ -112,93 +105,93 @@ classdef SatelliteLink
             end
         end
 
-        % Downlink-Wellenlänge
+        % Downlink wavelength
         function lambda = get.lambda_d(obj)
             lambda = 3e8 / obj.rx_center_frequency;
         end
 
-        % Gesamter Kabelverlust in dB
+        % Total cable loss in dB
         function loss = get.cable_loss(obj)
             loss = obj.baseStation.cable_length * obj.baseStation.cable_loss_per_meter;
         end
 
-        % Antennengewinn der Basisstation im Uplink
+        % Base station antenna gain for uplink
         function G = get.G_ground_u(obj)
             D = obj.baseStation.antenna_diameter;
             eta = obj.baseStation.antenna_efficiency;
             G = 10*log10(eta * (pi * D / obj.lambda_u)^2);
         end
 
-        % Antennengewinn der Basisstation im Downlink
+        % Base station antenna gain for downlink
         function G = get.G_ground_d(obj)
             D = obj.baseStation.antenna_diameter;
             eta = obj.baseStation.antenna_efficiency;
             G = 10*log10(eta * (pi * D / obj.lambda_d)^2);
         end
 
-        % Freiraumdämpfung (Uplink)
+        % Free space path loss (Uplink)
         function fspl = get.FSPL_u(obj)
             fspl = 20*log10(4*pi*obj.R/obj.lambda_u);
         end
 
-        % Freiraumdämpfung (Downlink)
+        % Free space path loss (Downlink)
         function fspl = get.FSPL_d(obj)
             fspl = 20*log10(4*pi*obj.R/obj.lambda_d);
         end
 
-        % Regenabschwächung nach vereinfachtem ITU‑R P.618 Modell
+        % Rain attenuation according to simplified ITU-R P.618 model
         function A = get.A_rain(obj)
             El = deg2rad(obj.El_deg);
-            L_r = obj.h_r / sin(El);    % Geometrische Regenpfadlänge [m]
+            L_r = obj.h_r / sin(El);    % Geometric rain path length [m]
             L_r_km = L_r / 1000;        % in km
             gamma_R = obj.k_r * (obj.R_rain)^obj.alpha_r;  % dB/km
-            L_eff = L_r_km * obj.reduction_factor;         % effektive Regenpfadlänge in km
+            L_eff = L_r_km * obj.reduction_factor;         % effective rain path length in km
             A = gamma_R * L_eff;
         end
 
-        % EIRP der Basisstation im Uplink
+        % EIRP of the base station for uplink
         function EIRP = get.EIRP_ground_u(obj)
-            % EIRP = TX Power + TX Gain - Kabelverlust + Antennengewinn
+            % EIRP = TX Power + TX Gain - Cable loss + Antenna gain
             EIRP = obj.baseStation.tx_power + obj.baseStation.tx_gain - obj.cable_loss + obj.G_ground_u;
         end
 
-        % Empfangene Leistung am Satelliten (Uplink)
+        % Received power at the satellite (Uplink)
         function P_rx = get.P_sat_rx(obj)
             P_rx = obj.EIRP_ground_u + obj.G_sat_rx - obj.FSPL_u - obj.A_rain - obj.sat_rx_loss;
         end
 
-        % Ausgangsleistung des Satelliten nach Transponder
+        % Output power of the satellite after transponder
         function P_tx = get.P_sat_tx(obj)
             P_tx = obj.P_sat_rx + obj.sat_amp_gain - obj.sat_tx_loss;
         end
 
-        % EIRP des Satelliten (Downlink)
+        % EIRP of the satellite (Downlink)
         function EIRP_sat_val = get.EIRP_sat(obj)
             EIRP_sat_val = obj.P_sat_tx + obj.G_sat_tx;
         end
 
-        % Empfangene Leistung an der Basisstation (Downlink)
+        % Received power at the base station (Downlink)
         function P_rx = get.P_rx_ground(obj)
             P_rx = obj.EIRP_sat + obj.G_ground_d - obj.cable_loss - obj.FSPL_d - obj.A_rain;
         end
 
-        % Rauschleistung des Empfängers in dBm
+        % Receiver noise power in dBm
         function N = get.N_dBm(obj)
             N_W = 1.38e-23 * obj.T * obj.B;
             N = 10*log10(N_W) + 30;
         end
 
-        % Signal-Rausch-Verhältnis in dB
+        % Signal-to-noise ratio in dB
         function snr = get.SNR_dB(obj)
             snr = obj.P_rx_ground - obj.N_dBm;
         end
 
-        % Signal-Rausch-Verhältnis (linear)
+        % Signal-to-noise ratio (linear)
         function snr_lin = get.SNR_linear(obj)
             snr_lin = 10^(obj.SNR_dB/10);
         end
 
-        %% Ausgabe der Link Budget Ergebnisse
+        %% Output of link budget results
         function displayLinkBudget(obj)
             fprintf('Link Budget Results\n');
             fprintf('  Base Station TX Center Frequency: %.2f Hz\n', obj.baseStation.tx_center_frequency);

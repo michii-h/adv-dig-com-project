@@ -19,6 +19,7 @@ dOmegaEst = angle(R(iStartSample))/iNfft;
 % Compensate Frequency Offset
 vfcPhaser = exp(-1j*dOmegaEst*[0:length(vfcReceiveSignal)-1]);
 vfcPhaser = vfcPhaser(:);
+vfcReceiveSignal = vfcPhaser .* vfcReceiveSignal;
 
 % Adjust to Start Sample
 vfcReceiveSignal = vfcReceiveSignal(iStartSample:end);
@@ -33,8 +34,5 @@ if SwitchDemoSync
     hold on
     plot(iStartSample, abs(R(iStartSample)),'ro')
     hold off
-
-    % figure;
-    % plot(abs(sum(reshape(filter(ones(1,iNg),1,vfcReceiveSignal.*conj(circshift(vfcReceiveSignal,[iNfft 0]))),iNs,iNOfSymbols),2)))
 end
 end

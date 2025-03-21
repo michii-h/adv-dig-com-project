@@ -1,4 +1,4 @@
-function [Slk, M, image_size, iNofFramesNeeded, iNOfFrames] = generate_drm_frames(stDRM, stOFDM, image_path, call_sign_str)
+function [Slk, M, image_size, iNofFramesNeeded, iNOfFrames] = generate_drm_frames(stDRM, stOFDM, image_path, greyscale, call_sign_str)
 % GENERATE_DRM_FRAME Generates a DRM frame with embedded image and call sign
 %   [Slk, M, image_size, iNofFramesNeeded, iNOfFrames] = generate_drm_frames(stDRM, stOFDM, image_path, call_sign_str)
 %
@@ -6,6 +6,7 @@ function [Slk, M, image_size, iNofFramesNeeded, iNOfFrames] = generate_drm_frame
 %     stDRM - Structure containing DRM parameters (mode, occupancy)
 %     stOFDM - Structure containing OFDM parameters (fft length, etc)
 %     image_path - Path to the image file to be embedded
+%     greyscale - toggle if image should be encoded as greyscale
 %     call_sign_str - String containing the call sign
 %
 %   Outputs:
@@ -27,7 +28,9 @@ rescale_factor = 8/sqrt(M);
 
 % Load Image
 image = imread(image_path);
-image = rgb2gray(image);
+if greyscale
+    image = rgb2gray(image);
+end
 
 image_size = size(image);
 
@@ -41,12 +44,12 @@ viData = [call_sign, viImage];
 %convert to binary 8-bits per integer
 binaryData8 = de2bi(viData, 8, 'left-msb');
 
-% reshape to 4-bits per row
+% reshape to sqrt(M)-bits per row
 [m,n]=size(binaryData8);
-binaryData4 = reshape(binaryData8', n/rescale_factor, m*rescale_factor)';
+binaryData = reshape(binaryData8', n/rescale_factor, m*rescale_factor)';
 
 % converte back to integer
-viData = bi2de(binaryData4,'left-msb');
+viData = bi2de(binaryData,'left-msb');
 
 if M == 4
     viDlk = qammod(viData,M,'UnitAveragePower',true);

@@ -29,7 +29,7 @@ function [Rlk_out] = fine_sync(Rlk_in, Plk, iNfft, SwitchDemoSync)
     % Process each OFDM symbol individually
     for l = 1:size(Plk,1)
         % Display phase plot if debug is enabled
-        if SwitchDemoSync
+        if SwitchDemoSync && l == 1
             figure(302)
             stem([-iNfft/2:iNfft/2-1],unwrap(mPhase(l,:)))
             xlabel('Subchannel k')
@@ -43,7 +43,7 @@ function [Rlk_out] = fine_sync(Rlk_in, Plk, iNfft, SwitchDemoSync)
         m = V\vPhi;
 
         % Display linear fit if debug is enabled
-        if SwitchDemoSync
+        if SwitchDemoSync && l == 1
             hold on
             kAxis = -iNfft/2:iNfft/2-1;
             plot(kAxis,m(1)*kAxis+m(2))
