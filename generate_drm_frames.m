@@ -21,8 +21,14 @@ iNOfSymbols = get_drm_symbols_per_frame(stDRM.mode);
 % Initialize Frame Matrix
 Slk = get_drm_data_template_frame(stDRM.mode, stDRM.occupancy);
 
+% Datamapping: M-QAM
+M = 4;     % 4 bits per row -> 16 possible values
+rescale_factor = 8/sqrt(M);
+
 % Load Image
 image = imread(image_path);
+image = rgb2gray(image);
+
 image_size = size(image);
 
 % Reconstruct the image to a vector
@@ -37,15 +43,16 @@ binaryData8 = de2bi(viData, 8, 'left-msb');
 
 % reshape to 4-bits per row
 [m,n]=size(binaryData8);
-binaryData4 = reshape(binaryData8', n/2, m*2)';
+binaryData4 = reshape(binaryData8', n/rescale_factor, m*rescale_factor)';
 
 % converte back to integer
 viData = bi2de(binaryData4,'left-msb');
 
-% Datamapping: M-QAM
-M = 16;     % 4 bits per row -> 16 possible values
-% viDlk = qammod(viData,M, 'UnitAveragePower',true);
-viDlk = qammod(viData,M);
+if M == 4
+    viDlk = qammod(viData,M,'UnitAveragePower',true);
+else
+    viDlk = qammod(viData,M);
+end
 
 % concat rows one after another
 viDlk = reshape(viDlk.',1,[]);

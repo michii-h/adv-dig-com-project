@@ -29,15 +29,27 @@ function [reconstructed_image, received_call_sign] = reconstruct_drm_image(Rlk, 
     end
 
     % QAM-Demodulation
-    demodulatedData = qamdemod(receivedSymbols', M);
+    %demodulatedData = qamdemod(receivedSymbols', M);
+    if M == 4
+        demodulatedData = qamdemod(receivedSymbols',M,'UnitAveragePower',true);
+    else
+        demodulatedData = qamdemod(receivedSymbols',M);
+    end
 
     % Convert data to binary (4 bits per symbol)
-    binaryData4 = de2bi(demodulatedData, 4, 'left-msb');
+    binaryData4 = de2bi(demodulatedData, sqrt(M), 'left-msb');
+
+    % Cut off padding (for full frame) at end
+    iNOfBits = (prod(image_size)+6)*8;
+    iLenData = iNOfBits/sqrt(M);
+    binaryData4 = binaryData4(1:iLenData,:);
+
+    rescale_factor = 8/sqrt(M);
 
     % Reshape data to 8-bit per row
     [m, n] = size(binaryData4);
-    % binaryData8 = reshape(binaryData4', n*2, m/2)';
-    binaryData8 = reshape(binaryData4', n*2, [])';
+    %binaryData8 = reshape(binaryData4', n*rescale_factor, m/rescale_factor)';
+    binaryData8 = reshape(binaryData4', n*rescale_factor, [])';
 
     % Reconversion to integer
     receivedData = bi2de(binaryData8, 'left-msb');
@@ -47,7 +59,8 @@ function [reconstructed_image, received_call_sign] = reconstruct_drm_image(Rlk, 
 
     % Reshape Data
     if size(start_index_callsign) ~= 0
-    receivedData = [receivedData(start_index_callsign:end); receivedData(1:start_index_callsign)];
+        % receivedData = [receivedData(start_index_callsign:end); receivedData(1:start_index_callsign)];
+        receivedData = circshift(receivedData, start_index_callsign-1);
     else
         warning('Callsign not found');
     end

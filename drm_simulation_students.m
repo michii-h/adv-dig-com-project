@@ -5,7 +5,8 @@ SwitchDemoSync = false; % additional plots for Demo
 
 %% Transmission Parameters Initialization
 % Create SatelliteLink object with appropriate parameters
-link = SatelliteLink('tx_center_frequency', 2400.172 * 1e6, 'tx_gain', 0, 'rx_gain', 50, 'tx_power', 7);
+tx_power = 7 + 30; % 7 dBm output power of Adalm Pluto + 30 dBm amplifier
+link = SatelliteLink('tx_center_frequency', 2400.113 * 1e6, 'tx_gain', 0, 'rx_gain', 30, 'tx_power', tx_power);
 link.useSameFrequency = true;
 link.displayLinkBudget();
 
@@ -31,7 +32,7 @@ stOFDM.iNs = stOFDM.iNfft + stOFDM.iNg;
 
 %% Generate DRM Frame
 % Call the function to generate the DRM frame
-image_path = 'th-rosenheim-logo-colored.png';
+image_path = 'th-rosenheim-logo-colored-square.png';
 call_sign = 'DL0FHR';
 [Slk, M, image_size, iNofFramesNeeded, iNOfFrames] = generate_drm_frames(stDRM, stOFDM, image_path, call_sign);
 
@@ -48,11 +49,15 @@ vfcTransmitSignal = SlkTemp(:);
 
 %% Channel
 % Switch Channels
-iSwitchChannel = 3;
+iSwitchChannel = 4;
 
 switch iSwitchChannel
 
     case 0 % ideal channel
+        % Repeat iG Frames
+        iG = 2;
+        vfcTransmitSignal = repmat(vfcTransmitSignal,iG,1);
+
         fprintf('Using ideal channel...\n');
         vfcReceiveSignal = vfcTransmitSignal;
 
@@ -76,6 +81,43 @@ switch iSwitchChannel
         vfcReceiveSignal = simulate_qo100_channel(vfcTransmitSignal, link);
 
     case 3 % Use Adalm Pluto
+        % SDR come from the link object
+        vfcReceiveSignal = LoopbackAdalmPlutoSat(vfcTransmitSignal, link);
+
+        % Compensate fixed freq offset
+        % Plk = get_drm_pilot_frame(stDRM.mode, stDRM.occupancy);
+        % spectrumPlk = abs(fft(Plk(:)));
+        % spectrumRx = abs(fft(vfcReceiveSignal));
+
+        % comb = zeros(length(spectrumRx),1);
+        % comb(round(750*(12000/link.baseStation.baseband_sample_rate))) = 10;
+        % comb(round(2250*(12000/link.baseStation.baseband_sample_rate))) = 10;
+        % comb(round(3000*(12000/link.baseStation.baseband_sample_rate))) = 10;
+
+        % [~, offset] = max(xcorr(comb, spectrumRx));
+
+        % freqShift = link.baseStation.baseband_sample_rate * offset / length(spectrumRx);
+
+        freqShift = 282; % TODO: Edit this with real offset measured in plot
+
+        delta_Omega = 2*pi*(freqShift/link.baseStation.baseband_sample_rate);
+        vPhaser = exp(-1i * delta_Omega * [0:length(vfcReceiveSignal)-1])';
+
+        vfcReceiveSignal = vfcReceiveSignal .* vPhaser;
+
+        figure(375);
+        pwelch(vfcReceiveSignal, [],[],[], link.baseStation.baseband_sample_rate);
+        hold on;
+        xline(link.baseStation.baseband_sample_rate*0.750/12000);
+        xline(link.baseStation.baseband_sample_rate*2.250/12000);
+        xline(link.baseStation.baseband_sample_rate*3.000/12000);
+        xticks([ ...
+            link.baseStation.baseband_sample_rate*0.750/12000,...
+            link.baseStation.baseband_sample_rate*2.250/12000,...
+            link.baseStation.baseband_sample_rate*3.000/12000
+            ])
+
+        case 4 % Use Adalm Pluto
         % SDR come from the link object
         vfcReceiveSignal = LoopbackAdalmPluto(vfcTransmitSignal, link);
 end
@@ -187,6 +229,8 @@ title('Transmit Constellation')
 
 subplot(2,3,3)
 image = imread(image_path);
+image = rgb2gray(image);
+
 imshow(uint8(image));
 
 subplot(2,3,4)

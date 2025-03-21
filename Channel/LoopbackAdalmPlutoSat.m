@@ -1,9 +1,9 @@
-function [vfcCaptureBuffer] = LoopbackAdalmPluto(vfcTransmitSignal, link)
+function [vfcCaptureBuffer] = LoopbackAdalmPlutoSat(vfcTransmitSignal, link)
     % Ensure Column Vector
     x = vfcTransmitSignal(:);
 
     % Use a conservative scale factor to avoid saturation
-    powerScaleFactor = 0.90;
+    powerScaleFactor = 0.9;
     txWaveform = x.*(1/max(abs(x))*powerScaleFactor);
     % txWaveform = x;
 
@@ -37,14 +37,14 @@ function [vfcCaptureBuffer] = LoopbackAdalmPluto(vfcTransmitSignal, link)
     fprintf('\nUsing Adalm Pluto ...\n');
 
     % Set up TX Radio
-    tx = sdrtx('Pluto');
+    tx = sdrtx('Pluto', 'RadioID', 'ip:141.60.193.130');
 
     tx.CenterFrequency      = fcTx;
     tx.BasebandSampleRate   = fs;
     tx.Gain                 = TxGain;
 
     % Set up RX Radio
-    rx = sdrrx('Pluto');
+    rx = sdrrx('Pluto', 'RadioID', 'ip:141.60.193.130');
     rx.BasebandSampleRate   = tx.BasebandSampleRate;
     rx.CenterFrequency      = fcRx;
     rx.GainSource           = 'Manual';
