@@ -42,15 +42,15 @@ classdef SatelliteLink
         R = 35786e3;      % Distance to satellite [m]
 
         % Rain attenuation parameters (simplified ITU-R P.618 model)
-        R_rain = 25;      % Rain rate in mm/h
-        El_deg = 30;      % Elevation angle in degrees
+        R_rain = 5;       % Rain rate in mm/h
+        El_deg = 30;      % Elevation angle in degrees (estimate)
         h_r = 5000;       % Effective rain height in m
         k_r = 0.0101;     % ITU-R P.838 coefficient
         alpha_r = 1.276;  % ITU-R P.838 coefficient
         reduction_factor = 0.6; % Reduction factor for effective rain path length
 
         % Receiver parameters
-        T = 290;          % System temperature in Kelvin
+        T = 3;            % Temperature for Cosmic background Noise in Kelvin
         B = 1e6;          % Receiver bandwidth in Hz
     end
 
